@@ -95,7 +95,8 @@ export class AIController {
         const mobObj = {
             type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head, weaponType: weaponType,
             health: 100, velocity: new THREE.Vector3(0, 0, 0), swingTime: Math.random() * 10,
-            attackTimer: 0, attackAnimTimer: 0, hitFlinch: 0, isGrounded: false, speed: isZombie ? 3.5 : 2.5, burnTimer: 0, shadeTarget: null
+            attackTimer: 0, attackAnimTimer: 0, hitFlinch: 0, isGrounded: false, speed: isZombie ? 3.5 : 2.5, burnTimer: 0, shadeTarget: null,
+            jumpCooldown: 0 // ✨ BUG FIX: Added isolated jump cooldown to stop infinite bouncing
         };
 
         mobGroup.traverse((child) => { child.userData = { isMob: true, mobRef: mobObj }; });
@@ -209,6 +210,9 @@ export class AIController {
         for (let i = this.mobs.length - 1; i >= 0; i--) {
             let mob = this.mobs[i]; let mesh = mob.mesh;
             let isMoving = false; let isBurning = false; let targetX = 0; let targetZ = 0;
+            
+            // ✨ BUG FIX: Reduce jump cooldown tracker
+            if (mob.jumpCooldown > 0) mob.jumpCooldown -= delta;
 
             if (mob.type === 'zombie' && isDay && mob.isGrounded) {
                 if (!this.world.hasRoof(mesh.position.x, mesh.position.y, mesh.position.z)) {
@@ -283,8 +287,11 @@ export class AIController {
 
             mob.velocity.x += (targetX - mob.velocity.x) * 10 * delta; mob.velocity.z += (targetZ - mob.velocity.z) * 10 * delta;
             let moveX = mob.velocity.x * delta; let moveZ = mob.velocity.z * delta;
-            mesh.position.x += moveX; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.x -= moveX; mob.velocity.x = 0; }
-            mesh.position.z += moveZ; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.z -= moveZ; mob.velocity.z = 0; }
+            
+            // ✨ BUG FIX: Removed setting velocity to 0 upon collision. 
+            // This maintains forward pressure against the wall, pulling them gracefully over the ledge once they jump!
+            mesh.position.x += moveX; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.x -= moveX; }
+            mesh.position.z += moveZ; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.z -= moveZ; }
 
             mob.velocity.y -= 25.0 * delta; let moveY = mob.velocity.y * delta; let nextY = mesh.position.y + moveY;
             if (this.checkCollision(mesh.position.x, nextY, mesh.position.z)) {
@@ -292,11 +299,18 @@ export class AIController {
                 else if (mob.velocity.y > 0) { mob.velocity.y = 0; mesh.position.y = Math.floor(nextY + 0.25 + 0.5) - 0.5 - 0.25; }
             } else { mesh.position.y = nextY; mob.isGrounded = false; }
 
-            if (isMoving && mob.isGrounded) {
+            // ✨ BUG FIX: Improved jump logic with Head Collision detection and Cooldown
+            if (isMoving && mob.isGrounded && mob.jumpCooldown <= 0) {
                 let mx = -Math.sin(mesh.rotation.y); let mz = -Math.cos(mesh.rotation.y);
                 let checkFront = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 0.1, mesh.position.z + mz * 0.6);
-                let checkAbove = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 1.2, mesh.position.z + mz * 0.6);
-                if (checkFront && !checkAbove) { mob.velocity.y = 8.5; mob.isGrounded = false; }
+                let checkAboveFront = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 1.2, mesh.position.z + mz * 0.6);
+                let checkAboveSelf = this.checkCollision(mesh.position.x, mesh.position.y + 2.0, mesh.position.z); // Don't jump if under a roof!
+                
+                if (checkFront && !checkAboveFront && !checkAboveSelf) { 
+                    mob.velocity.y = 8.5; 
+                    mob.isGrounded = false; 
+                    mob.jumpCooldown = 0.5; // Apply a 0.5s cooldown so they don't stutter jump
+                }
             }
 
             if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) mesh.position.y += 2.0 * delta; 
@@ -304,7 +318,6 @@ export class AIController {
             let targetArmLX = 0, targetArmRX = 0, targetLegLX = 0, targetLegRX = 0, targetBodyRotX = 0;
 
             if (mob.type === 'archer' && mob.attackTimer < 1.0) {
-                // ✨ ANIMATION FIX: Arms aim directly forward without twisting back
                 targetArmRX = -Math.PI / 2; 
                 targetArmLX = -Math.PI / 2;
             }
