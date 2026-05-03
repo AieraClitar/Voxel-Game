@@ -50,7 +50,7 @@ window.showChat = (msg) => {
 // ✨ V11: MULTIPLAYER NETWORKING SYSTEM ✨
 // ==========================================
 if (window.io) {
-    window.socket = io('[https://voxel-server-xxxx.onrender.com](https://voxel-server-xxxx.onrender.com)'); 
+    window.socket = io('https://voxel-server-xxxx.onrender.com');
     
     const networkPlayers = new Map();
 
