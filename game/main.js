@@ -130,11 +130,12 @@ if (window.io) {
             return;
         }
 
-        activeWorlds.forEach(world => {
+        // ✨ BUG FIX: Changed 'world' to 'serverInfo' so it doesn't break the 3D Game Engine!
+        activeWorlds.forEach(serverInfo => {
             const div = document.createElement('div');
             div.className = 'server-item';
             const info = document.createElement('span');
-            info.innerText = `🌍 ${world.hostName}'s World (${world.playerCount} player${world.playerCount !== 1 ? 's' : ''})`;
+            info.innerText = `🌍 ${serverInfo.hostName}'s World (${serverInfo.playerCount} player${serverInfo.playerCount !== 1 ? 's' : ''})`;
             
             const joinBtn = document.createElement('button');
             joinBtn.innerText = 'Join';
@@ -142,17 +143,17 @@ if (window.io) {
             
             joinBtn.onclick = () => {
                 localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
-                window.socket.emit('joinGame', { roomId: world.id, playerName: localPlayerName });
+                window.socket.emit('joinGame', { roomId: serverInfo.id, playerName: localPlayerName });
                 
                 AudioSys.init(); 
                 
-                // ✨ FIX: Skip the "Create World" menu!
                 document.getElementById('lobby-browser').style.display = 'none';
                 document.getElementById('main-menu').style.display = 'none';
                 
-                // Go straight to generating the terrain
                 document.getElementById('loading-screen').style.display = 'flex';
                 if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+                
+                // Now 'world' safely talks to your game engine!
                 world.updateChunks(new THREE.Vector3(16, 0, 16));
                 initialChunksNeeded = world.chunkQueue.length;
                 initialChunksDone = 0;
