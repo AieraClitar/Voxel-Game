@@ -236,9 +236,16 @@ if (window.io) {
 // LOBBY MENU CONTROLS
 // ---------------------------------
 document.getElementById('btn-multiplayer').addEventListener('click', () => {
-    const browser = document.getElementById('lobby-browser');
-    browser.style.display = browser.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('lobby-browser').style.display = 'block';
 });
+
+// ✨ THE MISSING PIECE: Close the popup!
+const closeLobbyBtn = document.getElementById('close-lobby');
+if(closeLobbyBtn) {
+    closeLobbyBtn.addEventListener('click', () => {
+        document.getElementById('lobby-browser').style.display = 'none';
+    });
+}
 
 document.getElementById('btn-play-menu').addEventListener('click', () => {
     localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
