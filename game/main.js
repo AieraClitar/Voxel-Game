@@ -49,7 +49,6 @@ window.showChat = (msg) => {
 // ==========================================
 // ✨ V11: MULTIPLAYER NETWORKING SYSTEM ✨
 // ==========================================
-// We keep this pointing to localhost for now to test on your own computer.
 if (window.io) {
     window.socket = io('http://localhost:3000'); 
     
@@ -59,11 +58,34 @@ if (window.io) {
         const group = new THREE.Group();
         const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); 
         const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); 
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), matSkin);
-        head.position.y = 1.5; head.castShadow = true;
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt);
-        body.position.y = 0.875; body.castShadow = true;
-        group.add(head, body);
+        const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
+        const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') });
+
+        const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat]; 
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); 
+        head.position.set(0, 1.5, 0); head.castShadow = true;
+        
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); 
+        body.position.set(0, 0.875, 0); body.castShadow = true;
+        
+        const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); 
+        const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); 
+        armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        
+        const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0);
+        const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); 
+        armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
+
+        const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); 
+        const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); 
+        legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
+        
+        const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); 
+        const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); 
+        legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
+
+        group.add(head, body, armL, armR, legL, legR);
+        group.userData = { head, armL, armR, legL, legR, swingTime: 0 };
         return group;
     }
 
@@ -88,9 +110,26 @@ if (window.io) {
     window.socket.on('playerMoved', (data) => {
         if(networkPlayers.has(data.id)) {
             const p = networkPlayers.get(data.id);
-            p.position.lerp(new THREE.Vector3(data.x, data.y, data.z), 0.3);
+            const targetPos = new THREE.Vector3(data.x, data.y, data.z);
+            const dist = p.position.distanceTo(targetPos);
+            
+            p.position.lerp(targetPos, 0.4);
             p.rotation.y = data.ry;
-            p.children[0].rotation.x = data.rx; 
+            p.userData.head.rotation.x = data.rx; 
+
+            if (dist > 0.05) {
+                p.userData.swingTime += 0.5;
+                let swing = Math.sin(p.userData.swingTime) * 0.5;
+                p.userData.armL.rotation.x = -swing;
+                p.userData.armR.rotation.x = swing;
+                p.userData.legL.rotation.x = swing;
+                p.userData.legR.rotation.x = -swing;
+            } else {
+                p.userData.armL.rotation.x = THREE.MathUtils.lerp(p.userData.armL.rotation.x, 0, 0.1);
+                p.userData.armR.rotation.x = THREE.MathUtils.lerp(p.userData.armR.rotation.x, 0, 0.1);
+                p.userData.legL.rotation.x = THREE.MathUtils.lerp(p.userData.legL.rotation.x, 0, 0.1);
+                p.userData.legR.rotation.x = THREE.MathUtils.lerp(p.userData.legR.rotation.x, 0, 0.1);
+            }
         }
     });
 
