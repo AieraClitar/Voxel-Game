@@ -3,8 +3,18 @@ import { SimpleNoise } from '../utils/Noise.js';
 import { Textures } from '../utils/Textures.js';
 
 const CHUNK_SIZE = 16;
-const RENDER_DISTANCE = 2;
+const CHUNK_HEIGHT = 128; 
+const Y_OFFSET = 30; 
+const RENDER_DISTANCE = 3;
 const WATER_LEVEL = 5;
+
+const BLOCK_TYPES = {
+    'air': 0, 'bedrock': 1, 'stone': 2, 'dirt': 3, 'grass': 4,
+    'sand': 5, 'snow': 6, 'ice': 7, 'water': 8, 'oak_wood': 9,
+    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13,
+    'cactus': 14, 'torch': 15, 'birch_planks': 16
+};
+const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
 export class World {
     constructor(scene) {
@@ -13,328 +23,433 @@ export class World {
         this.roughMap = new SimpleNoise(1337); 
         this.tempMap = new SimpleNoise(555); 
         this.humidMap = new SimpleNoise(999);
+        this.treeMap = new SimpleNoise(888); 
 
-        this.blocks = new Map(); 
-        this.chunks = new Map(); 
-        this.generatedChunksData = new Set(); 
+        this.chunkData = new Map(); 
+        this.chunks = new Map();    
+        this.chunkDataState = new Map(); 
+        this.chunkMeshState = new Map(); 
+
+        this.torchNormals = new Map(); 
         this.lightSources = new Map(); 
+
+        this.chunkQueue = [];
+        this.sunArc = 0;
 
         this.drops = []; 
         this.dropGroup = new THREE.Group();
         this.scene.add(this.dropGroup);
 
-        this.geometry = new THREE.BoxGeometry(1, 1, 1);
+        this.particles = [];
+        this.particleGroup = new THREE.Group();
+        this.scene.add(this.particleGroup);
+        this.geoParticle = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+
+        this.geoBlock = new THREE.BoxGeometry(1, 1, 1);
+        this.geoTorch = new THREE.BoxGeometry(0.12, 0.45, 0.12);
+        this.dropGeoBlock = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+        this.dropGeoTorch = new THREE.BoxGeometry(0.1, 0.4, 0.1); 
         
+        const texOakSide = Textures.generate('oak_side');
+        const texWoodTop = Textures.generate('wood_top');
+        const texBirchSide = Textures.generate('birch_side');
+        const texCraftSide = Textures.generate('crafting_side');
+        const texCraftTop = Textures.generate('crafting_top');
+        const texOakPlanks = Textures.generate('oak_planks');
+        const texBirchPlanks = Textures.generate('birch_planks');
+        
+        const toolMat = (texName) => new THREE.MeshLambertMaterial({ map: Textures.generate(texName), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+
         this.materials = {
-            grass: [
-                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }),
-                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }),
-                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }),
-                new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }),
-                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }),
-                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') })
+            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 
+            2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 
+            3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
+            4: [ 
+                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }),
+                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }),
+                new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') })
             ],
-            dirt: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }),
-            stone: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }),
-            sand: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }),
-            wood: new THREE.MeshLambertMaterial({ map: Textures.generate('wood') }),
-            leaves: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }),
-            snow: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }),
-            ice: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }),
-            cactus: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }),
-            torch: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }),
-            water: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }),
-            bedrock: new THREE.MeshLambertMaterial({ color: 0x222222 }) 
+            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 
+            6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 
+            7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 
+            8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }), 
+            9: [ 
+                new THREE.MeshLambertMaterial({ map: texOakSide }), new THREE.MeshLambertMaterial({ map: texOakSide }),
+                new THREE.MeshLambertMaterial({ map: texWoodTop }), new THREE.MeshLambertMaterial({ map: texWoodTop }),
+                new THREE.MeshLambertMaterial({ map: texOakSide }), new THREE.MeshLambertMaterial({ map: texOakSide }) // ✨ Fixed missing THREE. here!
+            ],
+            10: [ 
+                new THREE.MeshLambertMaterial({ map: texBirchSide }), new THREE.MeshLambertMaterial({ map: texBirchSide }),
+                new THREE.MeshLambertMaterial({ map: texWoodTop }), new THREE.MeshLambertMaterial({ map: texWoodTop }),
+                new THREE.MeshLambertMaterial({ map: texBirchSide }), new THREE.MeshLambertMaterial({ map: texBirchSide })
+            ],
+            11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 
+            12: new THREE.MeshLambertMaterial({ map: texOakPlanks }), 
+            13: [ 
+                new THREE.MeshLambertMaterial({ map: texCraftSide }), new THREE.MeshLambertMaterial({ map: texCraftSide }),
+                new THREE.MeshLambertMaterial({ map: texCraftTop }), new THREE.MeshLambertMaterial({ map: texOakPlanks }),
+                new THREE.MeshLambertMaterial({ map: texCraftSide }), new THREE.MeshLambertMaterial({ map: texCraftSide })
+            ],
+            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 
+            15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }),
+            16: new THREE.MeshLambertMaterial({ map: texBirchPlanks })
+        };
+
+        this.itemMaterials = {
+            stone: this.materials[2], dirt: this.materials[3], grass: this.materials[4], sand: this.materials[5],
+            oak_wood: this.materials[9], birch_wood: this.materials[10], leaves: this.materials[11], 
+            oak_planks: this.materials[12], birch_planks: this.materials[16],
+            crafting_table: this.materials[13], cactus: this.materials[14], torch: this.materials[15],
+            stick: toolMat('stick'), wooden_sword: toolMat('wooden_sword'), stone_sword: toolMat('stone_sword'),
+            wooden_pickaxe: toolMat('wooden_pickaxe'), stone_pickaxe: toolMat('stone_pickaxe'), wooden_axe: toolMat('wooden_axe'),
+            stone_axe: toolMat('stone_axe'), wooden_shovel: toolMat('wooden_shovel'), stone_shovel: toolMat('stone_shovel'),
+            bow: toolMat('bow'), crossbow: toolMat('crossbow'), gun: toolMat('gun')
         };
     }
 
-    getKey(x, y, z) { return `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`; }
     getChunkKey(cx, cz) { return `${cx},${cz}`; }
-
-    getModifiedBlocks() {
-        const mods = [];
-        for (const [key, data] of this.blocks.entries()) {
-            if (data.modifiedByUser) mods.push({ key: key, type: data.type, normal: data.normal });
-        }
-        return mods;
+    getBlockIndex(lx, ly, lz) { 
+        if(lx < 0 || lx > 15 || ly < 0 || ly > 127 || lz < 0 || lz > 15) return -1;
+        return (lx * CHUNK_SIZE * CHUNK_HEIGHT) + (lz * CHUNK_HEIGHT) + ly; 
     }
 
-    loadModifiedBlocks(modifications) {
-        this.blocks.clear();
-        this.generatedChunksData.clear(); 
-        for (const [key, chunkGroup] of this.chunks.entries()) {
-            this.scene.remove(chunkGroup);
-            chunkGroup.children.forEach(mesh => { if(mesh.geometry) mesh.geometry.dispose(); });
-        }
-        this.chunks.clear();
-        for (const light of this.lightSources.values()) { this.scene.remove(light); }
-        this.lightSources.clear();
+    getSurfaceHeight(x, z) {
+        for (let y = 60; y >= -30; y--) { if (this.hasBlock(x, y, z)) return y; }
+        return 5; 
+    }
 
-        if (modifications) {
-            modifications.forEach(mod => {
-                const [x, y, z] = mod.key.split(',').map(Number);
-                this.blocks.set(mod.key, { type: mod.type, normal: mod.normal, modifiedByUser: true });
-                if (mod.type === 'torch') this.addTorchLight(x, y, z);
+    hasRoof(x, y, z) {
+        for(let i = Math.round(y) + 1; i <= Math.round(y) + 30; i++) {
+            const type = this.getBlockType(Math.round(x), i, Math.round(z));
+            if(type !== 'air' && type !== 'water' && type !== 'torch') return true; 
+        }
+        return false;
+    }
+
+    getBlockType(x, y, z) {
+        if (y < -30 || y >= -30 + CHUNK_HEIGHT) return 'air';
+        const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE);
+        const data = this.chunkData.get(this.getChunkKey(cx, cz));
+        if (!data) return 'air'; 
+        const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET;
+        const idx = this.getBlockIndex(lx, ly, lz);
+        if(idx === -1) return 'air';
+        return ID_TO_TYPE[data[idx]];
+    }
+
+    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water'; }
+
+    setBlockData(x, y, z, typeId) {
+        if (y < -30 || y >= -30 + CHUNK_HEIGHT) return;
+        const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE);
+        const cKey = this.getChunkKey(cx, cz);
+        let data = this.chunkData.get(cKey);
+        if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); }
+        const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET;
+        const idx = this.getBlockIndex(lx, ly, lz);
+        if(idx !== -1) data[idx] = typeId;
+    }
+
+    addBlock(x, y, z, typeStr, normal = null) {
+        const typeId = BLOCK_TYPES[typeStr];
+        if (this.getBlockType(x, y, z) !== 'air') return;
+        this.setBlockData(x, y, z, typeId);
+        if (typeStr === 'torch') {
+            const key = `${x},${y},${z}`;
+            if (normal) this.torchNormals.set(key, normal);
+            this.addTorchLight(x, y, z);
+        }
+        this.triggerMeshRebuild(x, y, z);
+    }
+
+    removeBlock(x, y, z) {
+        const type = this.getBlockType(x, y, z);
+        if (type === 'air') return;
+        this.setBlockData(x, y, z, 0); 
+        const key = `${x},${y},${z}`;
+        if (type === 'torch' && this.lightSources.has(key)) {
+            this.scene.remove(this.lightSources.get(key)); this.lightSources.delete(key); this.torchNormals.delete(key);
+        }
+        this.checkAndBreakAttachedTorches(x, y, z);
+        this.triggerMeshRebuild(x, y, z);
+        this.spawnParticles(x, y, z, type); 
+    }
+
+    spawnParticles(x, y, z, type, isBlood = false) {
+        const count = isBlood ? 8 : 12;
+        const color = isBlood ? 0xcc0000 : (type.includes('leaves') ? 0x2d5a27 : (type.includes('wood') || type.includes('planks') ? 0x5c4033 : 0x888888));
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+        
+        for (let i = 0; i < count; i++) {
+            const mesh = new THREE.Mesh(this.geoParticle, mat);
+            mesh.position.set(x + (Math.random()-0.5), y + (Math.random()-0.5), z + (Math.random()-0.5));
+            this.particleGroup.add(mesh);
+            this.particles.push({
+                mesh: mesh, life: 1.0,
+                vel: new THREE.Vector3((Math.random()-0.5)*5, Math.random()*5, (Math.random()-0.5)*5)
             });
+        }
+    }
+
+    triggerMeshRebuild(x, y, z) {
+        const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE);
+        this.buildChunkMesh(cx, cz);
+        const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE;
+        if (lx === 0) this.buildChunkMesh(cx - 1, cz);
+        if (lx === CHUNK_SIZE - 1) this.buildChunkMesh(cx + 1, cz);
+        if (lz === 0) this.buildChunkMesh(cx, cz - 1);
+        if (lz === CHUNK_SIZE - 1) this.buildChunkMesh(cx, cz + 1);
+    }
+
+    checkAndBreakAttachedTorches(x, y, z) {
+        const offsets = [{ dx: 0, dy: 1, dz: 0, f: 'y' }, { dx: 1, dy: 0, dz: 0, f: 'x1' }, { dx: -1, dy: 0, dz: 0, f: 'x-1' }, { dx: 0, dy: 0, dz: 1, f: 'z1' }, { dx: 0, dy: 0, dz: -1, f: 'z-1' }];
+        for (let off of offsets) {
+            const tx = x + off.dx, ty = y + off.dy, tz = z + off.dz;
+            if (this.getBlockType(tx, ty, tz) === 'torch') {
+                const normal = this.torchNormals.get(`${tx},${ty},${tz}`);
+                let attached = false;
+                if (off.f === 'y' && (!normal || normal.y === 1)) attached = true;
+                if (off.f === 'x1' && normal && normal.x === 1) attached = true;
+                if (off.f === 'x-1' && normal && normal.x === -1) attached = true;
+                if (off.f === 'z1' && normal && normal.z === 1) attached = true;
+                if (off.f === 'z-1' && normal && normal.z === -1) attached = true;
+                if (attached) { this.removeBlock(tx, ty, tz); this.spawnItemDrop(tx, ty, tz, 'torch'); }
+            }
         }
     }
 
     addTorchLight(x, y, z) {
-        const light = new THREE.PointLight(0xffaa44, 15, 10); 
+        const light = new THREE.PointLight(0xffaa44, 15, 14); 
         light.position.set(x, y + 0.2, z);
         this.scene.add(light);
-        this.lightSources.set(this.getKey(x,y,z), light);
+        this.lightSources.set(`${x},${y},${z}`, light);
     }
 
-    addBlock(x, y, z, type, normal = null) {
-        const key = this.getKey(x, y, z);
-        if (this.blocks.has(key) && this.blocks.get(key).type !== 'air') return;
-        const cx = Math.floor(x / CHUNK_SIZE);
-        const cz = Math.floor(z / CHUNK_SIZE);
+    updateLights() { for (const light of this.lightSources.values()) light.intensity = 12 + (Math.random() * 4); }
+
+    generateChunkData(cx, cz) {
         const cKey = this.getChunkKey(cx, cz);
-        
-        if (this.chunks.has(cKey)) {
-            const chunkGroup = this.chunks.get(cKey);
-            let geo = this.geometry;
-            let px = Math.floor(x), py = Math.floor(y), pz = Math.floor(z);
-            
-            const mesh = new THREE.Mesh(geo, this.materials[type]);
-            
-            if (type === 'torch') {
-                geo = new THREE.BoxGeometry(0.12, 0.45, 0.12); // Slightly thinner!
-                mesh.geometry = geo;
-                if (normal) {
-                    if (normal.x === 1) { px -= 0.4; mesh.rotation.z = -0.4; py += 0.1; }
-                    else if (normal.x === -1) { px += 0.4; mesh.rotation.z = 0.4; py += 0.1; }
-                    else if (normal.z === 1) { pz -= 0.4; mesh.rotation.x = 0.4; py += 0.1; }
-                    else if (normal.z === -1) { pz += 0.4; mesh.rotation.x = -0.4; py += 0.1; }
-                    else { py -= 0.25; } 
-                } else { py -= 0.25; }
-            }
-            
-            mesh.position.set(px, py, pz);
-            chunkGroup.add(mesh);
-            this.blocks.set(key, { type: type, normal: normal, mesh: mesh, modifiedByUser: true });
-            
-            if (type === 'torch') this.addTorchLight(x, y, z);
-        }
-    }
+        this.chunkDataState.set(cKey, 'generating'); 
+        let data = this.chunkData.get(cKey);
+        if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); }
 
-    // ✨ FIX: Block Updates! Check for attached torches when a block breaks!
-    checkAndBreakAttachedTorches(x, y, z) {
-        const offsets = [
-            { dx: 0, dy: 1, dz: 0, face: 'y' },
-            { dx: 1, dy: 0, dz: 0, face: 'x1' },
-            { dx: -1, dy: 0, dz: 0, face: 'x-1' },
-            { dx: 0, dy: 0, dz: 1, face: 'z1' },
-            { dx: 0, dy: 0, dz: -1, face: 'z-1' }
-        ];
-        for (let off of offsets) {
-            const tx = x + off.dx, ty = y + off.dy, tz = z + off.dz;
-            const key = this.getKey(tx, ty, tz);
-            const b = this.blocks.get(key);
-            if (b && b.type === 'torch') {
-                let attached = false;
-                if (off.face === 'y' && (!b.normal || b.normal.y === 1)) attached = true;
-                if (off.face === 'x1' && b.normal && b.normal.x === 1) attached = true;
-                if (off.face === 'x-1' && b.normal && b.normal.x === -1) attached = true;
-                if (off.face === 'z1' && b.normal && b.normal.z === 1) attached = true;
-                if (off.face === 'z-1' && b.normal && b.normal.z === -1) attached = true;
-                
-                if (attached) {
-                    this.removeBlock(tx, ty, tz);
-                    this.spawnItemDrop(tx, ty, tz, 'torch');
-                }
-            }
-        }
-    }
-
-    removeBlock(x, y, z) {
-        const key = this.getKey(x, y, z);
-        if (this.blocks.has(key)) {
-            const block = this.blocks.get(key);
-            if (block.mesh) {
-                const cx = Math.floor(x / CHUNK_SIZE);
-                const cz = Math.floor(z / CHUNK_SIZE);
-                const chunkGroup = this.chunks.get(this.getChunkKey(cx, cz));
-                if(chunkGroup) chunkGroup.remove(block.mesh);
-            }
-            if (block.type === 'torch' && this.lightSources.has(key)) {
-                this.scene.remove(this.lightSources.get(key));
-                this.lightSources.delete(key);
-            }
-            
-            // Tell attached torches to break and fall!
-            this.checkAndBreakAttachedTorches(x, y, z);
-
-            this.blocks.set(key, { type: 'air', modifiedByUser: true }); 
-        }
-    }
-
-    generateChunk(cx, cz) {
-        const chunkGroup = new THREE.Group();
-        const startX = cx * CHUNK_SIZE;
-        const startZ = cz * CHUNK_SIZE;
-        const cKey = this.getChunkKey(cx, cz);
-        
-        const isFirstTime = !this.generatedChunksData.has(cKey);
-        if (isFirstTime) this.generatedChunksData.add(cKey);
-
+        const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE;
         const decoratorsToGenerate = [];
 
-        for (let x = 0; x < CHUNK_SIZE; x++) {
-            for (let z = 0; z < CHUNK_SIZE; z++) {
-                const worldX = startX + x;
-                const worldZ = startZ + z;
-                
-                let elevation = (this.heightMap.getNoise(worldX * 0.02, worldZ * 0.02) + 1) * 8;
-                let detail = (this.roughMap.getNoise(worldX * 0.08, worldZ * 0.08)) * 3;
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                const wx = startX + lx; const wz = startZ + lz;
+                let elevation = (this.heightMap.getNoise(wx * 0.015, wz * 0.015) + 1) * 8;
+                let detail = (this.roughMap.getNoise(wx * 0.06, wz * 0.06)) * 3;
                 let height = Math.floor(elevation + detail) + 2;
-                let maxRenderY = Math.max(height, WATER_LEVEL);
 
-                let temp = this.tempMap.getNoise(worldX * 0.008, worldZ * 0.008);
-                let humid = this.humidMap.getNoise(worldX * 0.008, worldZ * 0.008);
-                
+                let temp = this.tempMap.getNoise(wx * 0.005, wz * 0.005);
+                let humid = this.humidMap.getNoise(wx * 0.005, wz * 0.005);
                 let biome = 'plains';
-                if (temp > 0.2 && humid < 0) biome = 'desert';
-                else if (temp < -0.25) biome = 'tundra';
+                if (temp > 0.2 && humid < 0) biome = 'desert'; else if (temp < -0.25) biome = 'tundra';
 
-                if (isFirstTime) {
-                    for (let y = -30; y <= maxRenderY; y++) {
-                        let defaultType = 'stone';
-                        let isCave = false;
-
-                        if (y === -30) {
-                            defaultType = 'bedrock';
-                        } else if (y < height - 2) {
-                            let n1 = Math.sin(worldX * 0.2) * Math.sin(y * 0.3) * Math.sin(worldZ * 0.2);
-                            let n2 = this.roughMap.getNoise(worldX * 0.1, worldZ * 0.1);
-                            if (n1 + n2 * 0.5 > 0.7) isCave = true; 
-                        }
-
-                        if (!isCave) {
-                            if (y > height && y <= WATER_LEVEL) defaultType = biome === 'tundra' ? 'ice' : 'water'; 
-                            else if (y === height) {
-                                if (biome === 'desert') defaultType = 'sand';
-                                else if (biome === 'tundra') defaultType = 'snow';
-                                else defaultType = height <= WATER_LEVEL + 1 ? 'sand' : 'grass';
-                            } else if (y > height - 3 && y !== -30) defaultType = biome === 'desert' ? 'sand' : 'dirt';
-                            
-                            this.blocks.set(this.getKey(worldX, y, worldZ), { type: defaultType, modifiedByUser: false });
-                        }
+                for (let y = -30; y <= Math.max(height, WATER_LEVEL); y++) {
+                    let typeId = 2; let isCave = false;
+                    if (y === -30) typeId = 1; 
+                    else if (y <= height) { 
+                        let n1 = this.roughMap.getNoise(wx * 0.04, y * 0.04 + wz * 0.01); 
+                        let n2 = this.humidMap.getNoise(wz * 0.04, y * 0.04 + wx * 0.01);
+                        if (Math.abs(n1) < 0.12 && Math.abs(n2) < 0.12) isCave = true; 
                     }
-                    if (biome === 'desert' && height > WATER_LEVEL && Math.random() < 0.01) decoratorsToGenerate.push({ x: worldX, y: height + 1, z: worldZ, type: 'cactus' });
-                    else if (biome !== 'desert' && height > WATER_LEVEL + 1 && Math.random() < 0.02) decoratorsToGenerate.push({ x: worldX, y: height + 1, z: worldZ, type: 'tree' });
+
+                    if (!isCave) {
+                        if (y > height && y <= WATER_LEVEL) typeId = biome === 'tundra' ? 7 : 8; 
+                        else if (y === height) {
+                            if (biome === 'desert') typeId = 5; else if (biome === 'tundra') typeId = 6; else typeId = height <= WATER_LEVEL + 1 ? 5 : 4; 
+                        } else if (y > height - 3 && y !== -30) typeId = biome === 'desert' ? 5 : 3; 
+
+                        const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz);
+                        if (data[idx] === 0) data[idx] = typeId;
+                    }
                 }
 
-                for (let y = -30; y <= maxRenderY + 15; y++) {
-                    const bKey = this.getKey(worldX, y, worldZ);
-                    const storedBlock = this.blocks.get(bKey);
-                    if (storedBlock && storedBlock.type !== 'air') {
-                        let geo = storedBlock.type === 'torch' ? new THREE.BoxGeometry(0.12, 0.45, 0.12) : this.geometry;
-                        const mesh = new THREE.Mesh(geo, this.materials[storedBlock.type]);
-                        
-                        let px = worldX, py = y, pz = worldZ;
-                        if (storedBlock.type === 'torch' && storedBlock.normal) {
-                            const n = storedBlock.normal;
-                            if (n.x === 1) { px -= 0.4; mesh.rotation.z = -0.4; py += 0.1; }
-                            else if (n.x === -1) { px += 0.4; mesh.rotation.z = 0.4; py += 0.1; }
-                            else if (n.z === 1) { pz -= 0.4; mesh.rotation.x = 0.4; py += 0.1; }
-                            else if (n.z === -1) { pz += 0.4; mesh.rotation.x = -0.4; py += 0.1; }
-                            else { py -= 0.25; }
-                        } else if (storedBlock.type === 'torch') {
-                            py -= 0.25;
-                        }
-
-                        mesh.position.set(px, py, pz);
-                        chunkGroup.add(mesh);
-                        storedBlock.mesh = mesh;
+                if (this.getBlockType(wx, height, wz) !== 'air') {
+                    if (biome === 'desert' && height > WATER_LEVEL && Math.random() < 0.01) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'cactus' }); }
+                    else if (biome !== 'desert' && height > WATER_LEVEL + 1) {
+                        let treeDensity = this.treeMap.getNoise(wx * 0.02, wz * 0.02);
+                        if (treeDensity > 0.1 && Math.random() < 0.03) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'tree' }); }
                     }
                 }
             }
         }
 
-        if (isFirstTime) {
-            decoratorsToGenerate.forEach(pos => {
-                if (pos.type === 'cactus') {
-                    for(let cy = 0; cy < 3; cy++) this.addEnvironmentBlock(pos.x, pos.y + cy, pos.z, 'cactus', chunkGroup);
-                } else {
-                    const h = 4 + Math.floor(Math.random() * 2);
-                    for(let ty = 0; ty < h; ty++) this.addEnvironmentBlock(pos.x, pos.y + ty, pos.z, 'wood', chunkGroup);
-                    for(let lx = -3; lx <= 3; lx++) {
-                        for(let lz = -3; lz <= 3; lz++) {
-                            for(let ly = h - 3; ly <= h + 2; ly++) {
-                                if (lx === 0 && lz === 0 && ly < h) continue; 
-                                let dist = Math.sqrt(lx*lx + (ly-(h-1))*(ly-(h-1)) + lz*lz);
-                                if (dist < 2.5 + Math.random() * 1.5) {
-                                    this.addEnvironmentBlock(pos.x + lx, pos.y + ly, pos.z + lz, 'leaves', chunkGroup);
-                                }
+        decoratorsToGenerate.forEach(pos => {
+            if (pos.type === 'cactus') {
+                for(let cy = 0; cy < 3; cy++) this.setBlockData(pos.x, pos.y + cy, pos.z, 14);
+            } else {
+                const h = 4 + Math.floor(Math.random() * 2); let treeId = Math.random() < 0.5 ? 9 : 10;
+                for(let ty = 0; ty < h; ty++) this.setBlockData(pos.x, pos.y + ty, pos.z, treeId);
+                for(let ly = h - 2; ly <= h + 1; ly++) {
+                    let radius = ly === h + 1 ? 1.5 : 2.5;
+                    for(let lx = -2; lx <= 2; lx++) {
+                        for(let lz = -2; lz <= 2; lz++) {
+                            if (lx === 0 && lz === 0 && ly < h) continue; 
+                            if (lx*lx + lz*lz <= radius*radius) {
+                                this.setBlockData(pos.x + lx, pos.y + ly, pos.z + lz, 11); 
                             }
                         }
                     }
                 }
-            });
-        }
-        this.scene.add(chunkGroup);
-        this.chunks.set(cKey, chunkGroup);
+            }
+        });
+        this.chunkDataState.set(cKey, 'done');
     }
 
-    addEnvironmentBlock(x, y, z, type, chunkGroup) {
-        const key = this.getKey(x, y, z);
-        if (this.blocks.has(key)) return; 
-        this.blocks.set(key, { type: type, modifiedByUser: false });
-        const mesh = new THREE.Mesh(this.geometry, this.materials[type]);
-        mesh.position.set(x, y, z);
-        chunkGroup.add(mesh);
-        this.blocks.get(key).mesh = mesh;
+    buildChunkMesh(cx, cz) {
+        const cKey = this.getChunkKey(cx, cz);
+        const neighbors = [ this.getChunkKey(cx+1, cz), this.getChunkKey(cx-1, cz), this.getChunkKey(cx, cz+1), this.getChunkKey(cx, cz-1) ];
+        if (this.chunkDataState.get(cKey) !== 'done') return;
+        for (let n of neighbors) { if (this.chunkDataState.get(n) !== 'done') return; }
+
+        const data = this.chunkData.get(cKey);
+        if (!data) return;
+
+        const chunkGroup = new THREE.Group();
+        chunkGroup.userData.isChunk = true;
+
+        const instances = {};
+        for(let i = 1; i <= 16; i++) instances[i] = []; 
+
+        const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE;
+        const matrix = new THREE.Matrix4();
+        const isSolid = (id) => id > 0 && id !== 8 && id !== 11 && id !== 14 && id !== 15;
+
+        for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+            for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+                for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
+                    const id = data[this.getBlockIndex(lx, ly, lz)];
+                    if (id === 0) continue; 
+                    const wx = startX + lx; const wy = ly - Y_OFFSET; const wz = startZ + lz;
+
+                    if (isSolid(id)) {
+                        const top = this.getBlockType(wx, wy+1, wz); const bot = this.getBlockType(wx, wy-1, wz);
+                        const left = this.getBlockType(wx-1, wy, wz); const right = this.getBlockType(wx+1, wy, wz);
+                        const front = this.getBlockType(wx, wy, wz+1); const back = this.getBlockType(wx, wy, wz-1);
+                        if (isSolid(BLOCK_TYPES[top]) && isSolid(BLOCK_TYPES[bot]) && isSolid(BLOCK_TYPES[left]) && isSolid(BLOCK_TYPES[right]) && isSolid(BLOCK_TYPES[front]) && isSolid(BLOCK_TYPES[back])) continue;
+                    }
+
+                    matrix.makeTranslation(wx, wy, wz);
+                    if (id === 15) { 
+                        const n = this.torchNormals.get(`${wx},${wy},${wz}`);
+                        if (n) {
+                            if (n.x === 1) { matrix.makeTranslation(wx - 0.4, wy + 0.1, wz); matrix.multiply(new THREE.Matrix4().makeRotationZ(-0.4)); }
+                            else if (n.x === -1) { matrix.makeTranslation(wx + 0.4, wy + 0.1, wz); matrix.multiply(new THREE.Matrix4().makeRotationZ(0.4)); }
+                            else if (n.z === 1) { matrix.makeTranslation(wx, wy + 0.1, wz - 0.4); matrix.multiply(new THREE.Matrix4().makeRotationX(0.4)); }
+                            else if (n.z === -1) { matrix.makeTranslation(wx, wy + 0.1, wz + 0.4); matrix.multiply(new THREE.Matrix4().makeRotationX(-0.4)); }
+                            else matrix.makeTranslation(wx, wy - 0.25, wz);
+                        } else matrix.makeTranslation(wx, wy - 0.25, wz);
+                    }
+                    instances[id].push({ matrix: matrix.clone(), x: wx, y: wy, z: wz });
+                }
+            }
+        }
+
+        for (let i = 1; i <= 16; i++) {
+            if (instances[i].length === 0) continue;
+            const geo = (i === 15) ? this.geoTorch : this.geoBlock;
+            const mat = this.materials[i];
+            const iMesh = new THREE.InstancedMesh(geo, mat, instances[i].length);
+            iMesh.castShadow = true; 
+            iMesh.receiveShadow = true; 
+            
+            iMesh.userData.positions = []; iMesh.userData.isTerrain = true;
+            for (let j = 0; j < instances[i].length; j++) {
+                iMesh.setMatrixAt(j, instances[i][j].matrix);
+                iMesh.userData.positions.push({ x: instances[i][j].x, y: instances[i][j].y, z: instances[i][j].z });
+            }
+            chunkGroup.add(iMesh);
+        }
+
+        if (this.chunks.has(cKey)) {
+            const oldGroup = this.chunks.get(cKey);
+            this.scene.remove(oldGroup);
+            oldGroup.children.forEach(mesh => { if(mesh.dispose) mesh.dispose(); });
+        }
+        this.scene.add(chunkGroup); this.chunks.set(cKey, chunkGroup); this.chunkMeshState.set(cKey, 'done');
     }
 
     updateChunks(playerPos) {
         const currentChunkX = Math.floor(playerPos.x / CHUNK_SIZE);
         const currentChunkZ = Math.floor(playerPos.z / CHUNK_SIZE);
         const activeChunks = new Set();
-        for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
-            for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
-                const cx = currentChunkX + x;
-                const cz = currentChunkZ + z;
-                const cKey = this.getChunkKey(cx, cz);
-                activeChunks.add(cKey);
-                if (!this.chunks.has(cKey)) this.generateChunk(cx, cz);
+        
+        for (let x = -(RENDER_DISTANCE + 1); x <= (RENDER_DISTANCE + 1); x++) {
+            for (let z = -(RENDER_DISTANCE + 1); z <= (RENDER_DISTANCE + 1); z++) {
+                const cx = currentChunkX + x; const cz = currentChunkZ + z; const cKey = this.getChunkKey(cx, cz);
+                if (Math.abs(x) <= RENDER_DISTANCE && Math.abs(z) <= RENDER_DISTANCE) activeChunks.add(cKey);
+                if (!this.chunkDataState.has(cKey) && !this.chunkQueue.some(c => c.key === cKey && c.type === 'data')) this.chunkQueue.push({ cx, cz, key: cKey, type: 'data' });
             }
         }
+
+        for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
+            for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
+                const cx = currentChunkX + x; const cz = currentChunkZ + z; const cKey = this.getChunkKey(cx, cz);
+                if (this.chunkDataState.get(cKey) === 'done' && !this.chunkMeshState.has(cKey) && !this.chunkQueue.some(c => c.key === cKey && c.type === 'mesh')) {
+                    this.chunkQueue.push({ cx, cz, key: cKey, type: 'mesh' });
+                }
+            }
+        }
+
         for (const [key, chunkGroup] of this.chunks.entries()) {
             if (!activeChunks.has(key)) {
-                this.scene.remove(chunkGroup);
-                chunkGroup.children.forEach(mesh => { if(mesh.geometry) mesh.geometry.dispose(); });
-                this.chunks.delete(key);
+                this.scene.remove(chunkGroup); chunkGroup.children.forEach(mesh => { if(mesh.geometry) mesh.geometry.dispose(); });
+                this.chunks.delete(key); this.chunkMeshState.delete(key);
+            }
+        }
+        for (const key of this.chunkDataState.keys()) {
+            const [cx, cz] = key.split(',').map(Number);
+            if (Math.abs(cx - currentChunkX) > RENDER_DISTANCE + 2 || Math.abs(cz - currentChunkZ) > RENDER_DISTANCE + 2) {
+                this.chunkData.delete(key); this.chunkDataState.delete(key);
             }
         }
     }
 
-    hasBlock(x, y, z) { const b = this.blocks.get(this.getKey(x, y, z)); return b && b.type !== 'air' && b.type !== 'water'; }
-    getBlockType(x, y, z) { const b = this.blocks.get(this.getKey(x, y, z)); return b ? b.type : 'air'; }
+    processChunkQueue() {
+        if (this.chunkQueue.length > 0) {
+            const task = this.chunkQueue.shift();
+            if (task.type === 'data' && !this.chunkDataState.has(task.key)) this.generateChunkData(task.cx, task.cz);
+            else if (task.type === 'mesh' && !this.chunkMeshState.has(task.key)) this.buildChunkMesh(task.cx, task.cz);
+        }
+    }
 
-    spawnItemDrop(x, y, z, type) {
-        if (type === 'air' || type === 'water') return;
-        const geo = type === 'torch' ? new THREE.BoxGeometry(0.1, 0.4, 0.1) : new THREE.BoxGeometry(0.3, 0.3, 0.3);
-        
-        // ✨ FIX: Grab the whole material array for Grass Blocks so it renders all 6 sides perfectly!
-        const mat = this.materials[type]; 
-        
-        const mesh = new THREE.Mesh(geo, mat);
+    getModifiedBlocks() { return []; } 
+    loadModifiedBlocks(mods) { } 
+
+    spawnItemDrop(x, y, z, typeStr) {
+        if (typeStr === 'air' || typeStr === 'water') return;
+        const geo = typeStr === 'torch' ? this.dropGeoTorch : this.dropGeoBlock;
+        const mesh = new THREE.Mesh(geo, this.itemMaterials[typeStr] || this.itemMaterials['stone']);
         mesh.position.set(x + (Math.random()-0.5)*0.2, y, z + (Math.random()-0.5)*0.2);
         this.dropGroup.add(mesh);
-        this.drops.push({ mesh: mesh, type: type, velocityY: 4.0 });
+        
+        this.drops.push({ mesh: mesh, type: typeStr, velocityY: 4.0, pickupDelay: 1.5 });
     }
 
     updateDrops(delta) {
         for (let drop of this.drops) {
+            if (drop.pickupDelay > 0) drop.pickupDelay -= delta; 
+            
             drop.mesh.rotation.y += delta * 2;
             drop.velocityY -= 20.0 * delta; 
             let nextY = drop.mesh.position.y + (drop.velocityY * delta);
             if (this.hasBlock(Math.round(drop.mesh.position.x), Math.round(nextY - 0.65), Math.round(drop.mesh.position.z))) {
                 drop.velocityY = 0; drop.mesh.position.y = Math.round(nextY - 0.65) + 0.65;
             } else { drop.mesh.position.y = nextY; }
+        }
+
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.life -= delta * 1.5;
+            if(p.life <= 0) { this.particleGroup.remove(p.mesh); this.particles.splice(i, 1); continue; }
+            p.vel.y -= 15.0 * delta; 
+            p.mesh.position.addScaledVector(p.vel, delta);
+            p.mesh.rotation.x += delta * 5; p.mesh.rotation.y += delta * 5;
+            p.mesh.material.opacity = p.life;
         }
     }
 }

@@ -1,76 +1,298 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2b2b2b">
+    
+    <script>
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((reg) => console.log('Service Worker registered.', reg))
+                    .catch((err) => console.log('Service Worker failed.', err));
+            });
+        }
+    </script>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Sandbox - Alpha v0.32</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Voxel Sandbox - Pocket Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #87CEEB; user-select: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        :root {
+            --ui-bg: rgba(25, 25, 30, 0.95);
+            --ui-border: rgba(255, 255, 255, 0.15);
+            --slot-bg: rgba(0, 0, 0, 0.5);
+            --slot-border: rgba(255, 255, 255, 0.1);
+            --accent: #FFD700;
+            --slot-size: clamp(32px, min(7vw, 11vh), 48px); 
+        }
+
+        body { margin: 0; overflow: hidden; background-color: #111; user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: none; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
-        #mining-ui { display: none; position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 8px; background: rgba(0,0,0,0.6); border: 2px solid #222; border-radius: 4px; overflow: hidden; pointer-events: none; }
-        #mining-progress { width: 0%; height: 100%; background: #4CAF50; transition: width 0.1s linear; }
-
-        #time-ui { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 300px; height: 10px; background: rgba(0,0,0,0.5); border: 2px solid #222; border-radius: 10px; z-index: 10; }
-        #time-indicator { position: absolute; top: -12px; left: 0%; transform: translateX(-50%); font-size: 24px; text-shadow: 0 0 10px #000; transition: left 0.1s linear; }
-
-        #hotbar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; z-index: 10; }
-        .slot { position: relative; width: 50px; height: 50px; border: 2px solid #555; background-color: rgba(255,255,255,0.2); box-shadow: inset 0 0 10px rgba(0,0,0,0.5); image-rendering: pixelated; }
-        .slot.active { border-color: #FFD700; transform: scale(1.1); background-color: rgba(255, 215, 0, 0.2); }
-        .slot canvas { width: 100%; height: 100%; object-fit: cover; }
-        .item-count { position: absolute; bottom: 2px; right: 4px; color: white; font-family: monospace; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 0 #000; pointer-events: none; }
+        .menu-screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: #2b2b2b; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; color: white; box-shadow: inset 0 0 100px rgba(0,0,0,0.8); }
+        .menu-bg { position: absolute; width: 100%; height: 100%; opacity: 0.1; background-image: linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000), linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000); background-size: 32px 32px; background-position: 0 0, 16px 16px; z-index: -1; }
+        .game-title { font-size: clamp(32px, 5vw, 64px); font-weight: 900; letter-spacing: 2px; text-shadow: 4px 4px 0 #000; margin-bottom: 40px; text-align: center; color: #eee; }
         
-        #inventory-screen { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 500px; background: rgba(30, 30, 30, 0.95); border: 4px solid #555; border-radius: 10px; padding: 20px; z-index: 100; color: white; font-family: monospace; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
-        .inv-layout { display: flex; gap: 20px; margin-top: 15px; }
-        #preview-container { width: 150px; height: 250px; background: #222; border: 2px inset #000; display: flex; align-items: center; justify-content: center; overflow: hidden; pointer-events: none; }
-        #preview-canvas { outline: none; }
-        #inventory-grid { flex-grow: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 60px); gap: 10px; }
-        .inv-item { position: relative; border: 2px solid #555; background-color: rgba(255,255,255,0.05); box-shadow: inset 0 0 10px rgba(0,0,0,0.5); cursor: pointer; }
-        .inv-item:hover { background-color: rgba(255,255,255,0.2); }
-        #dragged-item { position: absolute; pointer-events: none; z-index: 9999; display: none; width: 50px; height: 50px; filter: drop-shadow(4px 4px 4px rgba(0,0,0,0.5)); }
+        .mc-btn { width: clamp(200px, 80vw, 280px); padding: 12px; margin: 8px; background: #c6c6c6; border: 3px solid #000; border-top-color: #fff; border-left-color: #fff; border-bottom-color: #555; border-right-color: #555; color: #111; font-family: monospace; font-size: clamp(14px, 4vw, 18px); font-weight: bold; cursor: pointer; text-shadow: 1px 1px 0 #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.5); z-index: 1; }
+        .mc-btn:active { border-top-color: #555; border-left-color: #555; border-bottom-color: #fff; border-right-color: #fff; transform: translateY(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+        .mc-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .mc-input { width: clamp(200px, 80vw, 280px); padding: 12px; margin: 20px; background: #000; border: 2px solid #555; border-top-color: #222; border-left-color: #222; color: #fff; font-family: monospace; font-size: clamp(14px, 4vw, 18px); text-align: center; box-sizing: border-box; z-index: 1; outline: none; }
+        .mc-input:focus { border-color: #fff; }
 
-        /* ✨ NEW: Item Name Tooltip */
-        #item-tooltip { display: none; position: absolute; background: rgba(0,0,0,0.9); color: #FFD700; padding: 5px 10px; border: 2px solid #555; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 16px; z-index: 10000; pointer-events: none; text-transform: uppercase; text-shadow: 1px 1px 0 #000; }
+        .progress-container { width: clamp(200px, 80vw, 300px); height: 10px; background: #000; border: 2px solid #555; margin-top: 20px; z-index: 1; }
+        .progress-fill { width: 0%; height: 100%; background: #4CAF50; transition: width 0.1s; }
+        .loading-text { font-family: monospace; color: #aaa; margin-top: 10px; z-index: 1; font-size: clamp(12px, 3vw, 16px); }
 
-        #pause-menu { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; flex-direction: column; align-items: center; justify-content: center; font-family: monospace; color: white; }
-        #pause-menu h1 { font-size: 48px; text-shadow: 4px 4px 0 #000; margin-bottom: 40px; }
-        .menu-btn { width: 250px; padding: 15px; margin: 10px; font-size: 20px; font-family: monospace; font-weight: bold; background: #555; color: white; border: 4px solid #000; cursor: pointer; transition: 0.1s; }
-        .menu-btn:hover { background: #4CAF50; border-color: #fff; transform: scale(1.05); }
-        #save-notif { color: #FFD700; margin-top: 20px; font-size: 18px; display: none; }
+        #hud-layer { display: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; border: 2px solid rgba(255, 255, 255, 0.9); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 100; box-shadow: 0 0 6px rgba(0,0,0,0.6); background: rgba(255,255,255,0.2); }
+        
+        #mining-ui { display: none; position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 6px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden; pointer-events: none; z-index: 150; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        #mining-progress { width: 0%; height: 100%; background: linear-gradient(90deg, #4CAF50, #81C784); transition: width 0.1s linear; }
+
+        #time-ui { position: absolute; top: max(env(safe-area-inset-top), 15px); left: 50%; transform: translateX(-50%); width: clamp(150px, 40vw, 220px); height: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; z-index: 10; pointer-events: none; backdrop-filter: blur(5px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        #time-indicator { position: absolute; top: -14px; left: 0%; transform: translateX(-50%); font-size: clamp(18px, 4vw, 26px); filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6)); }
+
+        #health-ui { position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%); width: clamp(200px, 60vw, 280px); height: 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; z-index: 10; padding: 2px; pointer-events: none; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        #health-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #ff3333, #ff6666); border-radius: 6px; transition: width 0.2s ease-out; box-shadow: inset 0 0 10px rgba(255, 51, 51, 0.5); }
+
+        #chat-feed { position: absolute; bottom: 120px; left: env(safe-area-inset-left, 20px); width: clamp(200px, 50vw, 300px); display: flex; flex-direction: column; gap: 6px; pointer-events: none; z-index: 100; }
+        .chat-msg { background: rgba(20,20,25,0.7); backdrop-filter: blur(4px); color: white; padding: 6px 10px; border-left: 4px solid #FFD700; border-radius: 6px; font-size: clamp(11px, 2.5vw, 13px); font-weight: 600; box-shadow: 0 4px 6px rgba(0,0,0,0.3); animation: fadeOut 6s forwards; word-wrap: break-word; }
+        @keyframes fadeOut { 0% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+        /* --- HOTBAR --- */
+        #hotbar { position: absolute; bottom: max(env(safe-area-inset-bottom), 15px); left: 50%; transform: translateX(-50%); display: flex; gap: clamp(4px, 1vw, 8px); background: rgba(20,20,25,0.85); backdrop-filter: blur(10px); padding: clamp(4px, 1vw, 8px); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); z-index: 500; pointer-events: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5); align-items: center; }
+        .slot { position: relative; width: clamp(38px, 9vw, 50px); height: clamp(38px, 9vw, 50px); border: 2px solid rgba(255,255,255,0.05); background-color: var(--slot-bg); box-shadow: inset 0 0 15px rgba(0,0,0,0.6); image-rendering: pixelated; border-radius: 10px; touch-action: none; transition: transform 0.1s, border-color 0.1s; box-sizing: border-box; flex-shrink: 0; }
+        .slot.active { border-color: var(--accent); transform: scale(1.1); background-color: rgba(255, 215, 0, 0.2); z-index: 2; box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); border-width: 3px; }
+        
+        .slot img, .inv-item img, #crafting-result img, #dragged-item img { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: contain !important; pointer-events: none !important; z-index: 1; }
+        .item-count { position: absolute; bottom: 2px; right: 4px; color: white; font-weight: 800; font-size: clamp(10px, 2.5vw, 13px); text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; pointer-events: none; font-family: monospace; z-index: 2; }
+
+        /* --- RESPONSIVE INVENTORY UI FIX --- */
+        #inventory-screen { 
+            display: none; 
+            position: absolute; 
+            top: 15px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            width: max-content; 
+            max-width: 95vw; 
+            height: max-content; 
+            max-height: calc(100vh - 110px); 
+            background: var(--ui-bg); 
+            backdrop-filter: blur(20px); 
+            border: 2px solid var(--ui-border); 
+            border-radius: 16px; 
+            padding: clamp(10px, 2vh, 20px); 
+            z-index: 600; 
+            color: white; 
+            box-shadow: 0 30px 60px rgba(0,0,0,0.8); 
+            pointer-events: auto; 
+            touch-action: none; 
+            box-sizing: border-box; 
+        }
+
+        #inventory-screen.active {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #close-inv { position: absolute; top: -15px; right: -15px; width: 40px; height: 40px; border-radius: 50%; background: #ff4444; color: #fff; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: transform 0.1s; font-weight: bold; z-index: 10; box-shadow: 0 4px 10px rgba(0,0,0,0.5);}
+        #close-inv:active { transform: scale(0.9); }
+
+        #inv-title { margin: 0 0 10px 0; text-align: center; font-size: clamp(16px, 4vh, 22px); font-weight: 900; letter-spacing: 1px; color: var(--accent); text-shadow: 0 2px 4px rgba(0,0,0,0.8); flex-shrink: 0; }
+
+        .inv-layout { 
+            display: flex; 
+            flex-direction: row;
+            gap: clamp(10px, 2vw, 20px); 
+            align-items: stretch; 
+            justify-content: center; 
+            overflow: hidden; 
+        }
+        
+        #preview-container { 
+            width: calc(var(--slot-size) * 3.5); 
+            background: rgba(0,0,0,0.6); 
+            border: 2px solid var(--ui-border); 
+            border-radius: 12px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8); 
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        #preview-canvas { width: 100%; height: 100%; outline: none; }
+        
+        #inventory-grid { 
+            display: grid; 
+            grid-template-columns: repeat(8, var(--slot-size)); 
+            grid-auto-rows: var(--slot-size); 
+            gap: clamp(4px, 1vh, 6px); 
+            justify-content: center;
+            align-content: start;
+            overflow-y: auto; 
+            padding-right: 5px;
+        }
+
+        #inventory-grid::-webkit-scrollbar { width: 6px; }
+        #inventory-grid::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
+        #inventory-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 4px; }
+
+        .inv-item { position: relative; width: 100%; height: 100%; border: 2px solid var(--slot-border); border-radius: 8px; background-color: var(--slot-bg); cursor: pointer; touch-action: none; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); box-sizing: border-box;}
+        
+        #dragged-item { position: absolute; pointer-events: none; z-index: 9999; display: none; width: var(--slot-size); height: var(--slot-size); filter: drop-shadow(4px 4px 6px rgba(0,0,0,0.6)); transform: translate(-50%, -50%); }
+        
+        #crafting-section { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            gap: clamp(5px, 1.5vh, 15px); 
+            background: rgba(0,0,0,0.3); 
+            padding: clamp(8px, 1.5vw, 15px); 
+            border-radius: 12px; 
+            border: 1px solid rgba(255,255,255,0.05); 
+            flex-shrink: 0;
+        }
+        
+        #crafting-grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, var(--slot-size)); 
+            grid-auto-rows: var(--slot-size); 
+            gap: clamp(4px, 1vh, 6px); 
+        }
+        .crafting-3x3 { grid-template-columns: repeat(3, var(--slot-size)) !important; grid-auto-rows: var(--slot-size) !important; }
+        .hidden-slot { display: none !important; }
+        
+        .crafting-header { font-size: clamp(10px, 2vh, 12px); color: rgba(255,255,255,0.5); font-weight: bold; letter-spacing: 1px; margin-bottom: 2px; text-align: center; }
+        #crafting-arrow { font-size: clamp(16px, 4vh, 24px); color: #888; transform: rotate(90deg); margin: 2px 0; }
+        #crafting-result { width: calc(var(--slot-size) * 1.3); height: calc(var(--slot-size) * 1.3); border: 2px solid #4CAF50; background-color: rgba(76, 175, 80, 0.15); box-shadow: 0 0 15px rgba(76, 175, 80, 0.3); border-radius: 10px; touch-action: none; box-sizing: border-box;}
+        
+        #item-tooltip { display: none; position: absolute; background: rgba(20,20,25,0.95); backdrop-filter: blur(5px); color: #fff; padding: 6px 12px; border: 2px solid #4a3b82; border-radius: 8px; font-weight: bold; font-size: clamp(12px, 3vh, 14px); z-index: 10000; pointer-events: none; text-transform: uppercase; box-shadow: 0 6px 15px rgba(0,0,0,0.6); white-space: nowrap;}
+
+        @media (max-height: 450px) {
+            #inventory-screen { padding: 10px; }
+            #inv-title { margin-bottom: 5px; }
+            .inv-layout { gap: 10px; }
+            #crafting-section { padding: 8px; gap: 5px; }
+        }
+
+        #pause-menu { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 800; flex-direction: column; align-items: center; justify-content: center; color: white; backdrop-filter: blur(8px); pointer-events: auto; }
+        #pause-menu h1 { font-size: clamp(36px, 6vw, 54px); text-shadow: 0 4px 10px rgba(0,0,0,0.8); margin-bottom: 30px; text-align: center; font-weight: 800; letter-spacing: 2px; }
+        #save-notif { color: #4CAF50; margin-top: 20px; font-size: clamp(14px, 4vw, 18px); display: none; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+
+        #mobile-controls { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
+        .m-btn { pointer-events: auto; position: absolute; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); border-radius: 50%; color: white; font-size: clamp(16px, 5vw, 22px); font-weight: bold; display: flex; align-items: center; justify-content: center; text-shadow: 0 2px 4px rgba(0,0,0,0.8); backdrop-filter: blur(4px); touch-action: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: transform 0.1s, background 0.1s; }
+        .m-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.9); }
+        
+        #m-look-zone { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: auto; z-index: 1; touch-action: none; }
+        #m-joystick-zone { position: absolute; bottom: clamp(60px, 15vh, 120px); left: clamp(20px, 6vw, 40px); width: clamp(100px, 25vw, 150px); height: clamp(100px, 25vw, 150px); background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; pointer-events: auto; touch-action: none; box-shadow: inset 0 0 20px rgba(0,0,0,0.3); z-index: 10; backdrop-filter: blur(2px); }
+        #m-joystick-knob { position: absolute; top: 50%; left: 50%; width: 40%; height: 40%; background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.5)); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 6px 15px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.6); }
+        
+        #m-actions { position: absolute; bottom: clamp(60px, 15vh, 120px); right: clamp(20px, 6vw, 40px); width: clamp(140px, 30vw, 180px); height: clamp(140px, 30vw, 180px); pointer-events: none; z-index: 10; }
+        .m-action-btn { position: absolute; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; pointer-events: auto; backdrop-filter: blur(5px); box-shadow: 0 6px 15px rgba(0,0,0,0.4); user-select: none; touch-action: none; transition: transform 0.1s; }
+        .m-action-btn:active { background: rgba(255,255,255,0.4); transform: scale(0.9); }
+        
+        #m-jump { bottom: 0; right: 0; width: 45%; height: 45%; font-size: clamp(20px, 5vw, 26px); }
+        #m-place { top: 0; left: 0; width: 40%; height: 40%; font-size: clamp(18px, 4vw, 22px); }
+        #m-drop { bottom: 0; left: -10%; width: 35%; height: 35%; font-size: clamp(12px, 3vw, 16px); font-weight: 800; background: rgba(255,80,80,0.3); border-color: rgba(255,80,80,0.5); color: #ffcccc; }
+        #m-inv { top: -40%; right: 0; width: 35%; height: 35%; font-size: clamp(16px, 4vw, 22px); border-radius: 25%; background: rgba(100,100,255,0.2); border-color: rgba(100,100,255,0.5); }
+
+        @media (hover: none) and (pointer: coarse) {
+            .mobile-ready #mobile-controls { display: block; }
+            .mobile-ready #health-ui { bottom: 85px; }
+            .mobile-ready #chat-feed { bottom: 105px; transform: scale(0.85); transform-origin: left bottom; }
+        }
+        
+        @media screen and (orientation: portrait) { #portrait-warning { display: flex; } }
+        #portrait-warning { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; color: white; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; text-align: center; z-index: 99999; letter-spacing: 1px; }
     </style>
 </head>
-<body>
-    <div id="crosshair"></div>
-    <div id="mining-ui"><div id="mining-progress"></div></div>
-    <div id="dragged-item"></div>
-    <!-- The new Tooltip -->
-    <div id="item-tooltip">ITEM NAME</div>
+<body class="mobile-ready">
+    <div id="portrait-warning">ROTATE PHONE TO LANDSCAPE</div>
 
-    <div id="time-ui"><div id="time-indicator">☀️</div></div>
-    
-    <div id="hotbar">
-        <div class="slot active" id="slot-1"></div>
-        <div class="slot" id="slot-2"></div>
-        <div class="slot" id="slot-3"></div>
-        <div class="slot" id="slot-4"></div>
-        <div class="slot" id="slot-5"></div>
+    <div id="main-menu" class="menu-screen">
+        <div class="menu-bg"></div>
+        <h1 class="game-title">VOXEL SANDBOX</h1>
+        <button id="btn-play-menu" class="mc-btn">Play Game</button>
+        <button class="mc-btn disabled">Settings</button>
+        <button class="mc-btn disabled">Multiplayer</button>
     </div>
 
+    <div id="world-menu" class="menu-screen" style="display: none;">
+        <div class="menu-bg"></div>
+        <h1 class="game-title">Create New World</h1>
+        <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
+        <button id="btn-create-world" class="mc-btn">Create / Play</button>
+        <button id="btn-back-menu" class="mc-btn">Back</button>
+    </div>
+
+    <div id="loading-screen" class="menu-screen" style="display: none;">
+        <div class="menu-bg"></div>
+        <h1 class="game-title">Building Terrain...</h1>
+        <div class="progress-container"><div id="loading-progress" class="progress-fill"></div></div>
+        <p id="loading-text" class="loading-text">Generating chunks...</p>
+    </div>
+
+    <div id="hud-layer">
+        <div id="crosshair"></div>
+        <div id="mining-ui"><div id="mining-progress"></div></div>
+        <div id="time-ui"><div id="time-indicator">☀️</div></div>
+        <div id="health-ui"><div id="health-bar"></div></div>
+        <div id="chat-feed"></div>
+        
+        <div id="hotbar">
+            <div class="slot active" id="slot-1"></div>
+            <div class="slot" id="slot-2"></div>
+            <div class="slot" id="slot-3"></div>
+            <div class="slot" id="slot-4"></div>
+            <div class="slot" id="slot-5"></div>
+        </div>
+
+        <div id="mobile-controls">
+            <div id="m-look-zone"></div>
+            <div id="m-joystick-zone"><div id="m-joystick-knob"></div></div>
+            <div id="m-actions">
+                <div class="m-action-btn" id="m-place">🧱</div>
+                <div class="m-action-btn" id="m-jump">⬆️</div>
+                <div class="m-action-btn" id="m-drop">DRP</div>
+                <div class="m-action-btn" id="m-inv">🎒</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dragged-item"></div>
+    <div id="item-tooltip">ITEM</div>
+
     <div id="inventory-screen">
-        <h2 style="margin: 0; text-align: center;">Inventory / Character</h2>
+        <div id="close-inv">✖</div>
+        <h2 id="inv-title">Inventory / Character</h2>
         <div class="inv-layout">
-            <div id="preview-container"><canvas id="preview-canvas" width="150" height="250"></canvas></div>
+            <div id="preview-container"><canvas id="preview-canvas" width="120" height="200"></canvas></div>
             <div id="inventory-grid"></div>
+            <div id="crafting-section">
+                <div><div class="crafting-header">CRAFTING</div><div id="crafting-grid"></div></div>
+                <div id="crafting-arrow">➔</div>
+                <div><div class="crafting-header" style="color: #4CAF50;">RESULT</div><div id="crafting-result" class="inv-item"></div></div>
+            </div>
         </div>
     </div>
 
     <div id="pause-menu">
         <h1>Game Paused</h1>
-        <button class="menu-btn" id="btn-resume">Back to Game</button>
-        <button class="menu-btn" id="btn-save">Save Progress</button>
-        <button class="menu-btn" id="btn-load">Load World</button>
-        <div id="save-notif">Game Saved Successfully!</div>
+        <button class="mc-btn" id="btn-resume">Resume Game</button>
+        <button class="mc-btn" id="btn-save">Save World</button>
+        <button class="mc-btn" id="btn-load">Load World</button>
+        <div id="save-notif">Saved!</div>
     </div>
+
+    <!-- ✨ MULTIPLAYER ADDITION: Socket.io library -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
     <script type="module" src="./game/main.js"></script>
