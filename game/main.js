@@ -65,7 +65,6 @@ window.updatePlayerList = function() {
 }
 
 if (window.io) {
-    // ✨ FIX FOR 400 BAD REQUEST ERROR
     window.socket = io('https://voxel-server-591c.onrender.com', {
         transports: ['websocket']
     });
@@ -146,8 +145,18 @@ if (window.io) {
                 window.socket.emit('joinGame', { roomId: world.id, playerName: localPlayerName });
                 
                 AudioSys.init(); 
+                
+                // ✨ FIX: Skip the "Create World" menu!
+                document.getElementById('lobby-browser').style.display = 'none';
                 document.getElementById('main-menu').style.display = 'none';
-                document.getElementById('world-menu').style.display = 'flex';
+                
+                // Go straight to generating the terrain
+                document.getElementById('loading-screen').style.display = 'flex';
+                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+                world.updateChunks(new THREE.Vector3(16, 0, 16));
+                initialChunksNeeded = world.chunkQueue.length;
+                initialChunksDone = 0;
+                isGeneratingWorld = true;
             };
             
             div.appendChild(info);
@@ -157,7 +166,7 @@ if (window.io) {
     });
 
     window.socket.on('currentPlayers', (data) => {
-        localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); // MAGIC TIME SYNC
+        localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         
         const players = data.players;
         Object.keys(players).forEach(id => {
@@ -239,7 +248,6 @@ document.getElementById('btn-multiplayer').addEventListener('click', () => {
     document.getElementById('lobby-browser').style.display = 'block';
 });
 
-// ✨ THE MISSING PIECE: Close the popup!
 const closeLobbyBtn = document.getElementById('close-lobby');
 if(closeLobbyBtn) {
     closeLobbyBtn.addEventListener('click', () => {
@@ -253,6 +261,8 @@ document.getElementById('btn-play-menu').addEventListener('click', () => {
 
     AudioSys.init(); 
     document.getElementById('main-menu').style.display = 'none';
+    
+    // Hosts still go to the world menu so they can name their world
     document.getElementById('world-menu').style.display = 'flex';
 });
 
