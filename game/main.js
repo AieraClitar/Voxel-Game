@@ -47,14 +47,49 @@ window.showChat = (msg) => {
 };
 
 // ==========================================
-// ✨ V11: MULTIPLAYER NETWORKING SYSTEM ✨
+// ✨ V12: MULTIPLAYER NAMES & PLAYER LIST ✨
 // ==========================================
+let localPlayerName = "Guest";
+const playerListUI = document.getElementById('playerListUI');
+const ul = document.getElementById('playerList');
+const networkPlayers = new Map();
+
+window.updatePlayerList = function() {
+    if(!ul) return;
+    ul.innerHTML = `<li>⭐ ${localPlayerName} (You)</li>`;
+    networkPlayers.forEach((playerObj) => {
+        const pName = playerObj.userData.playerName || "Guest";
+        ul.innerHTML += `<li>🟢 ${pName}</li>`;
+    });
+}
+
 if (window.io) {
     window.socket = io('https://voxel-server-591c.onrender.com');
-    
-    const networkPlayers = new Map();
 
-    function createNetworkPlayer() {
+    // Helper Function: Create Floating Nametag
+    function createNameTag(name) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
+        ctx.roundRect(16, 8, 224, 48, 8); 
+        ctx.fill();
+        
+        ctx.font = 'bold 28px monospace';
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, 128, 42); 
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, depthTest: false }); 
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(2, 0.5, 1); 
+        sprite.position.y = 2.0; 
+        return sprite;
+    }
+
+    function createNetworkPlayer(playerName) {
         const group = new THREE.Group();
         const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); 
         const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); 
@@ -84,27 +119,32 @@ if (window.io) {
         const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); 
         legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
 
-        group.add(head, body, armL, armR, legL, legR);
-        group.userData = { head, armL, armR, legL, legR, swingTime: 0 };
+        const nameTag = createNameTag(playerName || "Guest");
+        
+        group.add(head, body, armL, armR, legL, legR, nameTag);
+        group.userData = { head, armL, armR, legL, legR, swingTime: 0, playerName };
         return group;
     }
 
     window.socket.on('currentPlayers', (players) => {
         Object.keys(players).forEach(id => {
             if(id === window.socket.id) return;
-            const mesh = createNetworkPlayer();
+            const mesh = createNetworkPlayer(players[id].name);
             mesh.position.set(players[id].x, players[id].y, players[id].z);
             scene.add(mesh);
             networkPlayers.set(id, mesh);
         });
+        window.updatePlayerList();
     });
 
     window.socket.on('newPlayer', (data) => {
-        window.showChat("🌍 Someone joined the world!");
-        const mesh = createNetworkPlayer();
+        const pName = data.player.name || "Guest";
+        window.showChat(`🌍 ${pName} joined the world!`);
+        const mesh = createNetworkPlayer(pName);
         mesh.position.set(data.player.x, data.player.y, data.player.z);
         scene.add(mesh);
         networkPlayers.set(data.id, mesh);
+        window.updatePlayerList();
     });
 
     window.socket.on('playerMoved', (data) => {
@@ -135,9 +175,11 @@ if (window.io) {
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) {
-            window.showChat("👋 Someone left the world.");
+            const pName = networkPlayers.get(id).userData.playerName;
+            window.showChat(`👋 ${pName} left the world.`);
             scene.remove(networkPlayers.get(id));
             networkPlayers.delete(id);
+            window.updatePlayerList();
         }
     });
 
@@ -150,6 +192,32 @@ if (window.io) {
     });
 } else {
     console.warn("Socket.io not found! Multiplayer is disabled.");
+}
+
+// Player List Controls (Tab & Mobile)
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+        e.preventDefault(); 
+        if(playerListUI) playerListUI.style.display = 'block';
+    }
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'Tab') {
+        if(playerListUI) playerListUI.style.display = 'none';
+    }
+});
+
+const mobileTabBtn = document.getElementById('mobileTabBtn');
+if (mobileTabBtn) {
+    if (isMobile) mobileTabBtn.style.display = 'flex';
+    mobileTabBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if(playerListUI.style.display === 'none' || playerListUI.style.display === '') {
+            playerListUI.style.display = 'block';
+        } else {
+            playerListUI.style.display = 'none';
+        }
+    });
 }
 // ==========================================
 
@@ -229,6 +297,17 @@ let initialChunksNeeded = 0;
 let initialChunksDone = 0;
 
 document.getElementById('btn-play-menu').addEventListener('click', () => {
+    // Grab the name when they click play
+    const nameInput = document.getElementById('playerName');
+    if (nameInput) {
+        localPlayerName = nameInput.value.trim() || "Guest";
+    }
+    
+    // Connect to server with name
+    if (window.socket) {
+        window.socket.emit('joinGame', localPlayerName);
+    }
+
     AudioSys.init(); 
     document.getElementById('main-menu').style.display = 'none';
     document.getElementById('world-menu').style.display = 'flex';
