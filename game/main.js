@@ -47,9 +47,10 @@ window.showChat = (msg) => {
 };
 
 // ==========================================
-// ✨ V12: MULTIPLAYER NAMES & PLAYER LIST ✨
+// ✨ LOBBY SYSTEM, TIME SYNC & 400 ERROR FIX
 // ==========================================
 let localPlayerName = "Guest";
+let localRoomStartTime = Date.now() - (0.25 * 240 * 1000); 
 const playerListUI = document.getElementById('playerListUI');
 const ul = document.getElementById('playerList');
 const networkPlayers = new Map();
@@ -64,18 +65,18 @@ window.updatePlayerList = function() {
 }
 
 if (window.io) {
-    window.socket = io('https://voxel-server-591c.onrender.com');
+    // ✨ FIX FOR 400 BAD REQUEST ERROR
+    window.socket = io('https://voxel-server-591c.onrender.com', {
+        transports: ['websocket']
+    });
 
-    // Helper Function: Create Floating Nametag
     function createNameTag(name) {
         const canvas = document.createElement('canvas');
         canvas.width = 256; canvas.height = 64;
         const ctx = canvas.getContext('2d');
-        
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; 
         ctx.roundRect(16, 8, 224, 48, 8); 
         ctx.fill();
-        
         ctx.font = 'bold 28px monospace';
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
@@ -97,27 +98,20 @@ if (window.io) {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') });
 
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat]; 
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); 
-        head.position.set(0, 1.5, 0); head.castShadow = true;
-        
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); 
-        body.position.set(0, 0.875, 0); body.castShadow = true;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.5, 0); head.castShadow = true;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 0.875, 0); body.castShadow = true;
         
         const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); 
-        const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); 
-        armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
         
         const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0);
-        const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); 
-        armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
+        const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
         const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); 
-        const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); 
-        legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
+        const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
         
         const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); 
-        const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); 
-        legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
+        const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
 
         const nameTag = createNameTag(playerName || "Guest");
         
@@ -126,7 +120,46 @@ if (window.io) {
         return group;
     }
 
-    window.socket.on('currentPlayers', (players) => {
+    // LOBBY DATA
+    window.socket.on('lobbyUpdate', (activeWorlds) => {
+        const serverList = document.getElementById('server-list');
+        if(!serverList) return;
+        
+        serverList.innerHTML = '';
+        if(activeWorlds.length === 0) {
+            serverList.innerHTML = '<div style="color: #aaa; text-align: center; padding: 10px;">No active worlds. Host one!</div>';
+            return;
+        }
+
+        activeWorlds.forEach(world => {
+            const div = document.createElement('div');
+            div.className = 'server-item';
+            const info = document.createElement('span');
+            info.innerText = `🌍 ${world.hostName}'s World (${world.playerCount} player${world.playerCount !== 1 ? 's' : ''})`;
+            
+            const joinBtn = document.createElement('button');
+            joinBtn.innerText = 'Join';
+            joinBtn.className = 'mc-btn';
+            
+            joinBtn.onclick = () => {
+                localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
+                window.socket.emit('joinGame', { roomId: world.id, playerName: localPlayerName });
+                
+                AudioSys.init(); 
+                document.getElementById('main-menu').style.display = 'none';
+                document.getElementById('world-menu').style.display = 'flex';
+            };
+            
+            div.appendChild(info);
+            div.appendChild(joinBtn);
+            serverList.appendChild(div);
+        });
+    });
+
+    window.socket.on('currentPlayers', (data) => {
+        localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); // MAGIC TIME SYNC
+        
+        const players = data.players;
         Object.keys(players).forEach(id => {
             if(id === window.socket.id) return;
             const mesh = createNetworkPlayer(players[id].name);
@@ -183,6 +216,11 @@ if (window.io) {
         }
     });
 
+    window.socket.on('hostLeft', () => {
+        alert("The Host has left the world.");
+        location.reload(); 
+    });
+
     window.socket.on('blockUpdate', (data) => {
         if(data.action === 'add') {
             world.addBlock(data.x, data.y, data.z, data.type);
@@ -194,17 +232,28 @@ if (window.io) {
     console.warn("Socket.io not found! Multiplayer is disabled.");
 }
 
-// Player List Controls (Tab & Mobile)
+// ---------------------------------
+// LOBBY MENU CONTROLS
+// ---------------------------------
+document.getElementById('btn-multiplayer').addEventListener('click', () => {
+    const browser = document.getElementById('lobby-browser');
+    browser.style.display = browser.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('btn-play-menu').addEventListener('click', () => {
+    localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
+    if (window.socket) window.socket.emit('createGame', localPlayerName);
+
+    AudioSys.init(); 
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('world-menu').style.display = 'flex';
+});
+
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab') {
-        e.preventDefault(); 
-        if(playerListUI) playerListUI.style.display = 'block';
-    }
+    if (e.key === 'Tab') { e.preventDefault(); if(playerListUI) playerListUI.style.display = 'block'; }
 });
 document.addEventListener('keyup', (e) => {
-    if (e.key === 'Tab') {
-        if(playerListUI) playerListUI.style.display = 'none';
-    }
+    if (e.key === 'Tab') { if(playerListUI) playerListUI.style.display = 'none'; }
 });
 
 const mobileTabBtn = document.getElementById('mobileTabBtn');
@@ -212,11 +261,7 @@ if (mobileTabBtn) {
     if (isMobile) mobileTabBtn.style.display = 'flex';
     mobileTabBtn.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        if(playerListUI.style.display === 'none' || playerListUI.style.display === '') {
-            playerListUI.style.display = 'block';
-        } else {
-            playerListUI.style.display = 'none';
-        }
+        playerListUI.style.display = (playerListUI.style.display === 'none' || playerListUI.style.display === '') ? 'block' : 'none';
     });
 }
 // ==========================================
@@ -296,22 +341,6 @@ let isGeneratingWorld = false;
 let initialChunksNeeded = 0;
 let initialChunksDone = 0;
 
-document.getElementById('btn-play-menu').addEventListener('click', () => {
-    // Grab the name when they click play
-    const nameInput = document.getElementById('playerName');
-    if (nameInput) {
-        localPlayerName = nameInput.value.trim() || "Guest";
-    }
-    
-    // Connect to server with name
-    if (window.socket) {
-        window.socket.emit('joinGame', localPlayerName);
-    }
-
-    AudioSys.init(); 
-    document.getElementById('main-menu').style.display = 'none';
-    document.getElementById('world-menu').style.display = 'flex';
-});
 
 document.getElementById('btn-back-menu').addEventListener('click', () => {
     document.getElementById('world-menu').style.display = 'none';
@@ -392,7 +421,10 @@ function animate() {
     world.processChunkQueue();
 
     const delta = Math.min(clock.getDelta(), 0.1); 
-    dayTime = (dayTime + delta / 240.0) % 1;
+    
+    // ✨ TIME SYNC LOGIC
+    dayTime = ((Date.now() - localRoomStartTime) / 1000 / 240.0) % 1;
+    
     let sunArc = Math.sin(dayTime * Math.PI * 2); let angle = dayTime * Math.PI * 2;
     world.sunArc = sunArc;
 
