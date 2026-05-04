@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { Textures } from '../utils/Textures.js';
 import { AudioSys } from '../utils/AudioSys.js';
-import { create3DWeapon } from '../ai/AIController.js'; // ✨ FIX: Missing import path correctly targets AIController
+import { create3DWeapon } from '../ai/AIController.js'; 
 
 export class Player {
     constructor(camera, domElement, world) {
@@ -66,7 +66,6 @@ export class Player {
         this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, -0.625, 0); 
         this.armL = new THREE.Group(); this.armL.position.set(-0.425, -0.25, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
         this.armR_3rd = new THREE.Group(); this.armR_3rd.position.set(0.425, -0.25, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; this.armR_3rd.add(armRMesh);
-        
         this.legL = new THREE.Group(); this.legL.position.set(-0.15, -1.0, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; this.legL.add(legLMesh);
         this.legR = new THREE.Group(); this.legR.position.set(0.15, -1.0, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; this.legR.add(legRMesh);
 
@@ -298,10 +297,8 @@ export class Player {
             if (this.draggedItem.type !== null && this.draggedItem.count > 0) { dragEl.style.display = 'block'; if (this.uiIcons[this.draggedItem.type]) dragEl.appendChild(this.uiIcons[this.draggedItem.type].cloneNode()); const countSpan = document.createElement('span'); countSpan.className = 'item-count'; countSpan.innerText = this.draggedItem.count; dragEl.appendChild(countSpan); } else { dragEl.style.display = 'none'; }
         }
 
-        const selected = this.inventory[this.selectedSlot]; 
-        const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
-        // ✨ FIX: Safely remove old 3D models before attaching new ones
         const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) { this.arm.remove(old1st); if(old1st.geometry) old1st.geometry.dispose(); }
         const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) { this.armR_3rd.remove(old3rd); if(old3rd.geometry) old3rd.geometry.dispose(); }
 
@@ -310,7 +307,7 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                // ✨ FIX: Use the true 3D weapon builder!
+                // ✨ FIX: Hands now hold 3D tools!
                 mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, 0.3, -0.15); mesh1st.rotation.set(-Math.PI/4, 0, 0); 
                 mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.3, 0.15); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
@@ -452,9 +449,7 @@ export class Player {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
                 if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; 
-                    drop.mesh.visible = false; 
-                    window.socket.emit('requestPickup', drop.id);
+                    drop.isBeingPickedUp = true; drop.mesh.visible = false; window.socket.emit('requestPickup', drop.id);
                 }
             }
         }

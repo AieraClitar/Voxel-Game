@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { World } from './world/World.js';
 import { Player } from './entities/Player.js';
 import { Textures } from './utils/Textures.js';
-import { AIController, create3DWeapon } from './ai/AIController.js'; // ✨ CRITICAL FIX: Safe Import
+import { AIController, create3DWeapon } from './ai/AIController.js'; 
 import { AudioSys } from './utils/AudioSys.js';
 
 const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
@@ -58,6 +58,7 @@ if (window.io) {
         sprite.scale.set(2, 0.5, 1); sprite.position.y = 2.0; return sprite;
     }
 
+    // ✨ REMOTE PLAYERS: Render real 3D tools!
     function updateNetworkPlayerItem(group, itemType) {
         if (group.userData.heldItemType === itemType) return;
         group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); if (oldItem) armR.remove(oldItem);
@@ -191,16 +192,8 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type === 'archer' ? 'bow' : 'gun'); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    
-    window.socket.on('mobKilled', (data) => { 
-        aiController.killMobLocal(data.mobId); 
-        window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); 
-    });
-
-    window.socket.on('playerDisconnected', (id) => {
-        if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
-    });
-
+    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); });
+    window.socket.on('playerDisconnected', (id) => { if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); } });
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
     window.socket.on('blockUpdate', (data) => { if(data.action === 'add') { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); world.addBlock(data.x, data.y, data.z, data.type, null, true); } else { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); world.removeBlock(data.x, data.y, data.z, false, true); } });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
