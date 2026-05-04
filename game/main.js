@@ -121,9 +121,13 @@ if (window.io) {
     window.socket.on('world_snapshot', (data) => {
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         
-        // Wipe local world completely and initialize with Server's seed to guarantee matching terrain
+        // ✨ FATAL CACHE BUG FIX: Client MUST totally wipe chunkData dictionaries!
         scene.remove(world.dropGroup); scene.remove(world.particleGroup);
         for(const chunk of world.chunks.values()) scene.remove(chunk);
+        
+        world.chunkData.clear(); world.chunks.clear(); 
+        world.chunkDataState.clear(); world.chunkMeshState.clear();
+        world.serverBlocks.clear();
         
         world = new World(scene, data.seed);
         player.world = world; aiController.world = world;
@@ -165,12 +169,10 @@ if (window.io) {
         mesh.userData.targetPos.copy(mesh.position); scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
     });
 
-    // Server completely commands the client's inventory and objects
     window.socket.on('pickupSuccess', (type) => { player.pickupItem(type); });
     window.socket.on('item_spawned', (data) => { world.spawnNetworkedDrop(data.id, data.x, data.y, data.z, data.type); });
     window.socket.on('item_removed', (dropId) => { world.removeNetworkedDrop(dropId); });
     
-    // Server Authority Damage routing
     window.socket.on('playerDamaged', (data) => { if (data.id === window.socket.id) { player.takeDamage(data.dmg, data.source); AudioSys.hurt(); player.shakeIntensity = 0.6; }});
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type === 'archer' ? 'bow' : 'gun'); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });

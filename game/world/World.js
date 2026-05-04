@@ -54,7 +54,6 @@ export class World {
     hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water'; }
     setBlockData(x, y, z, typeId) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const cKey = this.getChunkKey(cx, cz); let data = this.chunkData.get(cKey); if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); } const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx !== -1) data[idx] = typeId; }
 
-    // ✨ RECONCILIATION: Added FORCE bypass for Server Commands
     addBlock(x, y, z, typeStr, normal = null, force = false) {
         const typeId = BLOCK_TYPES[typeStr]; 
         if (!force && this.getBlockType(x, y, z) !== 'air') return;
@@ -63,7 +62,6 @@ export class World {
         this.triggerMeshRebuild(x, y, z);
     }
 
-    // ✨ RECONCILIATION: Added FORCE bypass for Server Commands
     removeBlock(x, y, z, skipParticles = false, force = false) {
         const type = this.getBlockType(x, y, z); 
         if (!force && type === 'air') return;
@@ -133,6 +131,7 @@ export class World {
                 }
 
                 if (this.getBlockType(wx, height, wz) !== 'air') {
+                    // Math.random() removed entirely to prevent client divergence
                     let localTreeRand = Math.abs(this.treeMap.random(wx, wz)); 
                     let localCactusRand = Math.abs(this.roughMap.random(wx, wz));
 

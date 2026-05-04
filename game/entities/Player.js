@@ -109,7 +109,7 @@ export class Player {
             if (window.showChat) window.showChat(`💀 Player was obliterated by a ${source.toUpperCase()}!`);
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
             this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
-            if (window.socket) window.socket.emit('playerRespawn'); // Reset health on server
+            if (window.socket) window.socket.emit('playerRespawn'); 
         }
     }
 
@@ -362,7 +362,7 @@ export class Player {
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
                     
-                    // ✨ SERVER AUTHORITY: Attack intent sent. The server maintains health.
+                    // ✨ SERVER AUTHORITY: Attack intent sent. The server manages health.
                     if (window.socket) { window.socket.emit('requestMobAttack', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
                     this.shakeIntensity = 0.3; 
                 }
@@ -374,13 +374,6 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
-
-                // Force torch breaks through server validation
-                if (type === 'torch') {
-                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
-                    if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
-                    break;
-                }
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
@@ -489,7 +482,7 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ SERVER AUTHORITY: Emits intention. Local state is unaltered until server replies.
+                        // ✨ SERVER AUTHORITY: Emits intention, does NOT remove locally until server confirms.
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
@@ -511,7 +504,7 @@ export class Player {
                 window.socket.emit('move', {
                     x: this.camera.position.x, y: this.camera.position.y - 1.5, z: this.camera.position.z,
                     ry: this._euler.y, rx: this._euler.x, heldItem: this.inventory[this.selectedSlot]?.type || null,
-                    isAttacking: this.attackAnimTimer > 0 // Do not emit health, Server owns Health!
+                    isAttacking: this.attackAnimTimer > 0
                 });
                 this.lastNetUpdate = performance.now();
             }
