@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { World } from './world/World.js';
 import { Player } from './entities/Player.js';
 import { Textures } from './utils/Textures.js';
-import { AIController, create3DWeapon } from './ai/AIController.js'; 
+import { AIController, create3DWeapon } from './ai/AIController.js'; // ✨ CRITICAL FIX: Safe Import
 import { AudioSys } from './utils/AudioSys.js';
 
 const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
@@ -58,7 +58,6 @@ if (window.io) {
         sprite.scale.set(2, 0.5, 1); sprite.position.y = 2.0; return sprite;
     }
 
-    // ✨ REMOTE PLAYERS NOW HOLD FULL 3D WEAPONS!
     function updateNetworkPlayerItem(group, itemType) {
         if (group.userData.heldItemType === itemType) return;
         group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); if (oldItem) armR.remove(oldItem);
@@ -156,6 +155,18 @@ if (window.io) {
             const hpMesh = p.getObjectByName('healthBar'); if(hpMesh) { hpMesh.scale.x = Math.max(0.01, s.health / 100); hpMesh.material.color.setHex(s.health > 50 ? 0x00ff00 : 0xff0000); }
         });
         aiController.syncFromServer(data.mobs);
+    });
+
+    window.socket.on('hard_sync', (data) => {
+        if(!data.blocks) return;
+        Object.keys(data.blocks).forEach(key => {
+            const [bx, by, bz] = key.split(',').map(Number);
+            if (world.serverBlocks.get(key) !== data.blocks[key]) {
+                world.serverBlocks.set(key, data.blocks[key]);
+                if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
+                else world.addBlock(bx, by, bz, data.blocks[key]);
+            }
+        });
     });
 
     window.socket.on('newPlayer', (data) => {

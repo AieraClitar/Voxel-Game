@@ -51,10 +51,12 @@ export class AIController {
     constructor(scene, world, player) {
         this.scene = scene; this.world = world; this.player = player;
         this.mobs = new Map(); 
+        
         this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.5, 0.25); 
+        this.geoArrow = new THREE.BoxGeometry(0.05, 0.05, 0.6); this.matArrow = new THREE.MeshLambertMaterial({color: 0xcccccc}); this.geoBullet = new THREE.BoxGeometry(0.1, 0.1, 0.1); this.matBullet = new THREE.MeshBasicMaterial({color: 0xffff00}); 
     }
 
     spawnMob(id, type, x, y, z, weaponType, faceType) {
@@ -70,9 +72,11 @@ export class AIController {
         const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
         const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
-        // ✨ 3D WEAPONS EQUIPPED BY MOBS
-        const weaponMesh = create3DWeapon(weaponType || 'wooden_sword');
-        weaponMesh.position.set(0, -0.25, 0.15); weaponMesh.rotation.set(Math.PI / 2, 0, 0); weaponMesh.castShadow = true; armR.add(weaponMesh);
+        // ✨ MOBS EQUIP REAL 3D WEAPONS
+        if (weaponType) {
+            const weaponMesh = create3DWeapon(weaponType);
+            weaponMesh.position.set(0, -0.25, 0.15); weaponMesh.rotation.set(Math.PI / 2, 0, 0); weaponMesh.castShadow = true; armR.add(weaponMesh);
+        }
 
         const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); const legLMesh = new THREE.Mesh(this.geoLeg, matPants); legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
         const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); const legRMesh = new THREE.Mesh(this.geoLeg, matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
@@ -104,7 +108,6 @@ export class AIController {
         this.mobs.delete(id);
     }
 
-    // ✨ 3D PROJECTILES (Arrows & Tracer Bullets)
     shootProjectile(fromPos, toPos, type) {
         const isGun = type === 'gun'; const speed = isGun ? 60 : 30;
         const projGroup = new THREE.Group();

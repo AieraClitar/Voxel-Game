@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { Textures } from '../utils/Textures.js';
 import { AudioSys } from '../utils/AudioSys.js';
-import { create3DWeapon } from './ai/AIController.js';
+import { create3DWeapon } from '../ai/AIController.js'; // ✨ FIX: Missing import path correctly targets AIController
 
 export class Player {
     constructor(camera, domElement, world) {
@@ -54,8 +54,8 @@ export class Player {
         this.armGroup = new THREE.Group();
         const matSkin = new THREE.MeshLambertMaterial({ color: 0xe0ac69 }); 
         this.arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), matSkin); this.arm.position.set(0.35, -0.3, -0.4); this.arm.rotation.x = -Math.PI / 4; this.armGroup.add(this.arm);
-        this.heldBlockGeo = new THREE.BoxGeometry(0.25, 0.25, 0.25); this.heldBlock = new THREE.Mesh(this.heldBlockGeo, new THREE.MeshLambertMaterial({color: 0xffffff}));
-        this.arm.add(this.heldBlock); this.camera.add(this.armGroup); 
+        
+        this.camera.add(this.armGroup); 
         this.muzzleFlash = new THREE.PointLight(0xffffaa, 0, 10); this.muzzleFlash.position.set(0, 0.3, -0.4); this.arm.add(this.muzzleFlash);
 
         this.bodyGroup = new THREE.Group(); this.world.scene.add(this.bodyGroup);
@@ -66,7 +66,7 @@ export class Player {
         this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, -0.625, 0); 
         this.armL = new THREE.Group(); this.armL.position.set(-0.425, -0.25, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
         this.armR_3rd = new THREE.Group(); this.armR_3rd.position.set(0.425, -0.25, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; this.armR_3rd.add(armRMesh);
-        this.heldBlock_3rd = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,0.1), new THREE.MeshLambertMaterial({color: 0xffffff})); this.armR_3rd.add(this.heldBlock_3rd);
+        
         this.legL = new THREE.Group(); this.legL.position.set(-0.15, -1.0, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; this.legL.add(legLMesh);
         this.legR = new THREE.Group(); this.legR.position.set(0.15, -1.0, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; this.legR.add(legRMesh);
 
@@ -107,7 +107,6 @@ export class Player {
         const flash = document.createElement('div'); flash.style.position = 'absolute'; flash.style.top = '0'; flash.style.left = '0'; flash.style.width = '100%'; flash.style.height = '100%'; flash.style.backgroundColor = 'rgba(255, 0, 0, 0.4)'; flash.style.pointerEvents = 'none'; flash.style.zIndex = '9999'; flash.style.transition = 'opacity 0.2s';
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
-            if (window.showChat) window.showChat(`💀 You were obliterated by a ${source.toUpperCase()}!`);
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
             this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
@@ -299,32 +298,30 @@ export class Player {
             if (this.draggedItem.type !== null && this.draggedItem.count > 0) { dragEl.style.display = 'block'; if (this.uiIcons[this.draggedItem.type]) dragEl.appendChild(this.uiIcons[this.draggedItem.type].cloneNode()); const countSpan = document.createElement('span'); countSpan.className = 'item-count'; countSpan.innerText = this.draggedItem.count; dragEl.appendChild(countSpan); } else { dragEl.style.display = 'none'; }
         }
 
-        const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        const selected = this.inventory[this.selectedSlot]; 
+        const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
-        // ✨ WIPE OLD WEAPON MESHES
-        const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) this.arm.remove(old1st);
-        const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) this.armR_3rd.remove(old3rd);
+        // ✨ FIX: Safely remove old 3D models before attaching new ones
+        const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) { this.arm.remove(old1st); if(old1st.geometry) old1st.geometry.dispose(); }
+        const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) { this.armR_3rd.remove(old3rd); if(old3rd.geometry) old3rd.geometry.dispose(); }
 
         if (selected && selected.type !== null && selected.count > 0) {
-            this.heldBlock.visible = false; this.heldBlock_3rd.visible = false; 
             let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
             let mesh1st, mesh3rd;
 
-            // ✨ USE THE 3D WEAPON FACTORY FOR FIRST/THIRD PERSON!
-            import('./ai/AIController.js').then(module => {
-                if (isTool(selected.type)) {
-                    mesh1st = module.create3DWeapon(selected.type); mesh1st.position.set(0, 0.3, -0.15); mesh1st.rotation.set(-Math.PI/4, 0, 0); 
-                    mesh3rd = module.create3DWeapon(selected.type); mesh3rd.position.set(0, -0.3, 0.15); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
-                } else if (selected.type === 'torch') {
-                    mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.geometry.translate(0, 0.15, 0); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
-                    mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.geometry.translate(0, 0.2, 0); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
-                } else {
-                    mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.geometry.translate(0, 0.075, 0); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
-                    mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.geometry.translate(0, 0.125, 0); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
-                }
-                mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
-                mesh3rd.name = 'equippedItem3rd'; this.armR_3rd.add(mesh3rd);
-            });
+            if (isTool(selected.type)) {
+                // ✨ FIX: Use the true 3D weapon builder!
+                mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, 0.3, -0.15); mesh1st.rotation.set(-Math.PI/4, 0, 0); 
+                mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.3, 0.15); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
+            } else if (selected.type === 'torch') {
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
+                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
+            } else {
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
+                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
+            }
+            mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
+            mesh3rd.name = 'equippedItem3rd'; this.armR_3rd.add(mesh3rd);
         }
     }
 
@@ -408,7 +405,6 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
@@ -456,7 +452,8 @@ export class Player {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
                 if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; drop.mesh.visible = false; 
+                    drop.isBeingPickedUp = true; 
+                    drop.mesh.visible = false; 
                     window.socket.emit('requestPickup', drop.id);
                 }
             }
@@ -491,8 +488,6 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        this.world.removeBlock(bx, by, bz); 
-                        if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
