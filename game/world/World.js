@@ -11,9 +11,10 @@ const BLOCK_TYPES = {
 const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
 export class World {
-    constructor(scene) {
+    // ✨ DETERMINISTIC SEED: Passed directly from Server Snapshot
+    constructor(scene, seed = 42) {
         this.scene = scene;
-        this.heightMap = new SimpleNoise(42); this.roughMap = new SimpleNoise(1337); this.tempMap = new SimpleNoise(555); this.humidMap = new SimpleNoise(999); this.treeMap = new SimpleNoise(888); 
+        this.heightMap = new SimpleNoise(seed); this.roughMap = new SimpleNoise(seed + 1337); this.tempMap = new SimpleNoise(seed + 555); this.humidMap = new SimpleNoise(seed + 999); this.treeMap = new SimpleNoise(seed + 888); 
         this.chunkData = new Map(); this.chunks = new Map(); this.chunkDataState = new Map(); this.chunkMeshState = new Map(); 
         this.torchNormals = new Map(); this.lightSources = new Map(); this.chunkQueue = []; this.sunArc = 0;
         
@@ -93,7 +94,7 @@ export class World {
                 const normal = this.torchNormals.get(`${tx},${ty},${tz}`); let attached = false;
                 if (off.f === 'y' && (!normal || normal.y === 1)) attached = true; if (off.f === 'x1' && normal && normal.x === 1) attached = true; if (off.f === 'x-1' && normal && normal.x === -1) attached = true; if (off.f === 'z1' && normal && normal.z === 1) attached = true; if (off.f === 'z-1' && normal && normal.z === -1) attached = true;
                 
-                // ✨ AUTHORITY SYNC: Intent to break torch cascaded to server
+                // ✨ AUTHORITY SYNC: Relays cascade break intent to server
                 if (attached) { 
                     if(window.socket) window.socket.emit('requestBlockBreak', {x:tx, y:ty, z:tz, type:'torch'}); 
                 }
@@ -129,8 +130,7 @@ export class World {
                 }
 
                 if (this.getBlockType(wx, height, wz) !== 'air') {
-                    // ✨ DESYNC FIX: Replaced Math.random() with deterministic noise mapping!
-                    // This guarantees the host and client ALWAYS generate the exact same trees at the exact same heights.
+                    // ✨ DETERMINISTIC SEED RENDERING: Replaced Math.random() with strict map noise!
                     let localTreeRand = Math.abs(this.treeMap.random(wx, wz)); 
                     let localCactusRand = Math.abs(this.roughMap.random(wx, wz));
 
@@ -146,15 +146,13 @@ export class World {
         decoratorsToGenerate.forEach(pos => {
             if (pos.type === 'cactus') { for(let cy = 0; cy < 3; cy++) this.setBlockData(pos.x, pos.y + cy, pos.z, 14); } 
             else {
-                // Deterministic Tree Heights based on the seed
                 const h = 4 + Math.floor(pos.rand * 10) % 2; let treeId = pos.rand < 0.015 ? 9 : 10;
                 for(let ty = 0; ty < h; ty++) this.setBlockData(pos.x, pos.y + ty, pos.z, treeId);
                 for(let ly = h - 2; ly <= h + 1; ly++) { let radius = ly === h + 1 ? 1.5 : 2.5; for(let lx = -2; lx <= 2; lx++) { for(let lz = -2; lz <= 2; lz++) { if (lx === 0 && lz === 0 && ly < h) continue; if (lx*lx + lz*lz <= radius*radius) { this.setBlockData(pos.x + lx, pos.y + ly, pos.z + lz, 11); } } } }
             }
         });
 
-        // ✨ SERVER TRUTH OVERRIDE
-        // Overwrite any natural generation with what the Server says actually happened
+        // ✨ RECONCILIATION: Overwrites any procedural generation with the Server Truth Map
         if (this.serverBlocks) {
             for (let [key, typeStr] of this.serverBlocks.entries()) {
                 const [bx, by, bz] = key.split(',').map(Number);

@@ -75,10 +75,7 @@ export class Player {
         document.addEventListener('mousemove', (e) => {
             const dragEl = document.getElementById('dragged-item');
             if (dragEl && dragEl.style.display === 'block') { dragEl.style.left = e.pageX + 'px'; dragEl.style.top = e.pageY + 'px'; }
-            if (this.isDistributing && this.draggedItem.type) {
-                const els = document.elementsFromPoint(e.clientX, e.clientY);
-                for (let el of els) { if (el.classList.contains('inv-item') && el.dataset.type === 'crafting') { this.distributeItemToSlot(parseInt(el.dataset.index)); break; } }
-            }
+            if (this.isDistributing && this.draggedItem.type) { const els = document.elementsFromPoint(e.clientX, e.clientY); for (let el of els) { if (el.classList.contains('inv-item') && el.dataset.type === 'crafting') { this.distributeItemToSlot(parseInt(el.dataset.index)); break; } } }
         });
         document.addEventListener('mousedown', (e) => { if (e.target.id === 'close-inv') return; if (this.draggedItem.type) { this.isDistributing = true; this.distributedSlots.clear(); } });
         document.addEventListener('mouseup', () => { this.isDistributing = false; });
@@ -96,12 +93,8 @@ export class Player {
         if (!this.gameActive || this.isInvOpen) return;
         const item = this.inventory[this.selectedSlot];
         if (item && item.count > 0) {
-            const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-            const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5)); 
-            
-            // ✨ SERVER AUTHORITY: Client only emits intent.
-            if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: item.type });
-            
+            const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5)); 
+            if(window.socket) window.socket.emit('requestDropItem', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: item.type }); // ✨ INTENT
             item.count--; if (item.count <= 0) item.type = null;
             this.updateInventoryUI(); if (AudioSys && AudioSys.playNoise) AudioSys.playNoise(0.1, 0.1, 400); 
         }
@@ -112,7 +105,6 @@ export class Player {
         const healthBar = document.getElementById('health-bar'); if(healthBar) healthBar.style.width = `${(this.health / this.maxHealth) * 100}%`;
         const flash = document.createElement('div'); flash.style.position = 'absolute'; flash.style.top = '0'; flash.style.left = '0'; flash.style.width = '100%'; flash.style.height = '100%'; flash.style.backgroundColor = 'rgba(255, 0, 0, 0.4)'; flash.style.pointerEvents = 'none'; flash.style.zIndex = '9999'; flash.style.transition = 'opacity 0.2s';
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
-
         if (this.health <= 0) {
             if (window.showChat) window.showChat(`💀 Player was obliterated by a ${source.toUpperCase()}!`);
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
@@ -124,20 +116,14 @@ export class Player {
         document.addEventListener('keydown', (e) => {
             if (e.code === 'F5') { e.preventDefault(); this.cameraMode = (this.cameraMode + 1) % 3; return; }
             if (e.code === 'KeyQ') { e.preventDefault(); this.dropSelectedItem(); return; } 
-            switch(e.code){
-                case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break;
-                case 'Space': if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break;
-                case 'KeyE': this.toggleInventory(); break;
-                case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break;
-            }
+            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break; case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
         });
         document.addEventListener('keyup', (e) => { switch(e.code){ case 'KeyW': this.moveForward = false; break; case 'KeyA': this.moveLeft = false; break; case 'KeyS': this.moveBackward = false; break; case 'KeyD': this.moveRight = false; break; } });
         document.addEventListener('mousedown', (e) => { if(this.controls.isLocked) this.onInteract(e.button); });
         document.addEventListener('mouseup', (e) => { if(e.button === 0) this.stopMining(); });
         document.addEventListener('wheel', (e) => { if (this.controls.isLocked) { const now = performance.now(); if (now - this.lastWheelTime < 100) return; this.lastWheelTime = now; let n = this.selectedSlot + Math.sign(e.deltaY); if(n>4)n=0; if(n<0)n=4; this.setHotbarSlot(n); } });
 
-        const closeBtn = document.getElementById('close-inv');
-        if (closeBtn) { closeBtn.onclick = (e) => { e.stopPropagation(); this.toggleInventory(); }; closeBtn.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); this.toggleInventory(); }; }
+        const closeBtn = document.getElementById('close-inv'); if (closeBtn) { closeBtn.onclick = (e) => { e.stopPropagation(); this.toggleInventory(); }; closeBtn.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); this.toggleInventory(); }; }
 
         const joyZone = document.getElementById('m-joystick-zone'); const joyKnob = document.getElementById('m-joystick-knob'); let joyTouchId = null;
         if (joyZone) {
@@ -152,35 +138,12 @@ export class Player {
 
         const lookZone = document.getElementById('m-look-zone'); let lookTouchId = null; let lastTouchX = 0; let lastTouchY = 0; let touchStartTime = 0; let isSwiping = false;
         if (lookZone) {
-            lookZone.addEventListener('touchstart', (e) => {
-                if (e.target !== lookZone) return; e.preventDefault();
-                for (let touch of e.changedTouches) {
-                    if (lookTouchId === null) { lookTouchId = touch.identifier; lastTouchX = touch.pageX; lastTouchY = touch.pageY; touchStartTime = performance.now(); isSwiping = false; this.miningTimeout = setTimeout(() => { if (!isSwiping && this.gameActive) this.onInteract(0); }, 250); }
-                }
-            }, {passive: false});
-            lookZone.addEventListener('touchmove', (e) => {
-                if (e.target !== lookZone) return; e.preventDefault();
-                for (let touch of e.touches) {
-                    if (touch.identifier === lookTouchId) {
-                        let dx = touch.pageX - lastTouchX; let dy = touch.pageY - lastTouchY;
-                        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) { isSwiping = true; clearTimeout(this.miningTimeout); this.stopMining(); }
-                        if (this.gameActive && !this.isInvOpen) {
-                            this._euler.setFromQuaternion(this.camera.quaternion); this._euler.y -= dx * 0.005; this._euler.x -= dy * 0.005; this._euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this._euler.x)); this.camera.quaternion.setFromEuler(this._euler);
-                        }
-                        lastTouchX = touch.pageX; lastTouchY = touch.pageY;
-                    }
-                }
-            }, {passive: false});
+            lookZone.addEventListener('touchstart', (e) => { if (e.target !== lookZone) return; e.preventDefault(); for (let touch of e.changedTouches) { if (lookTouchId === null) { lookTouchId = touch.identifier; lastTouchX = touch.pageX; lastTouchY = touch.pageY; touchStartTime = performance.now(); isSwiping = false; this.miningTimeout = setTimeout(() => { if (!isSwiping && this.gameActive) this.onInteract(0); }, 250); } } }, {passive: false});
+            lookZone.addEventListener('touchmove', (e) => { if (e.target !== lookZone) return; e.preventDefault(); for (let touch of e.touches) { if (touch.identifier === lookTouchId) { let dx = touch.pageX - lastTouchX; let dy = touch.pageY - lastTouchY; if (Math.abs(dx) > 5 || Math.abs(dy) > 5) { isSwiping = true; clearTimeout(this.miningTimeout); this.stopMining(); } if (this.gameActive && !this.isInvOpen) { this._euler.setFromQuaternion(this.camera.quaternion); this._euler.y -= dx * 0.005; this._euler.x -= dy * 0.005; this._euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this._euler.x)); this.camera.quaternion.setFromEuler(this._euler); } lastTouchX = touch.pageX; lastTouchY = touch.pageY; } } }, {passive: false});
             const endLook = (e) => { for (let touch of e.changedTouches) { if (touch.identifier === lookTouchId) { clearTimeout(this.miningTimeout); if (!isSwiping && performance.now() - touchStartTime < 250 && this.gameActive) { this.onInteract(0); setTimeout(() => this.stopMining(), 100); } this.stopMining(); lookTouchId = null; } } };
             lookZone.addEventListener('touchend', endLook); lookZone.addEventListener('touchcancel', endLook);
         }
-        document.addEventListener('touchmove', (e) => {
-            const dragEl = document.getElementById('dragged-item');
-            if (dragEl && dragEl.style.display === 'block' && e.touches.length > 0) {
-                const touch = e.touches[0]; dragEl.style.left = touch.pageX + 'px'; dragEl.style.top = touch.pageY + 'px';
-                if (this.isDistributing && this.draggedItem.type) { const el = document.elementFromPoint(touch.clientX, touch.clientY); if (el && el.classList.contains('inv-item') && el.dataset.type === 'crafting') { this.distributeItemToSlot(parseInt(el.dataset.index)); } }
-            }
-        }, {passive: false}); 
+        document.addEventListener('touchmove', (e) => { const dragEl = document.getElementById('dragged-item'); if (dragEl && dragEl.style.display === 'block' && e.touches.length > 0) { const touch = e.touches[0]; dragEl.style.left = touch.pageX + 'px'; dragEl.style.top = touch.pageY + 'px'; if (this.isDistributing && this.draggedItem.type) { const el = document.elementFromPoint(touch.clientX, touch.clientY); if (el && el.classList.contains('inv-item') && el.dataset.type === 'crafting') { this.distributeItemToSlot(parseInt(el.dataset.index)); } } } }, {passive: false}); 
     }
 
     updateJoystick(touch, rectZone, knob) {
@@ -210,29 +173,12 @@ export class Player {
     distributeItemToSlot(index) {
         if (this.distributedSlots.has(index) || this.draggedItem.count <= 0) return;
         const slot = this.craftingGrid[index]; const limit = this.getStackLimit(this.draggedItem.type);
-        if (!slot.type || slot.type === this.draggedItem.type) {
-            if (slot.count < limit) { slot.type = this.draggedItem.type; slot.count++; this.draggedItem.count--; this.distributedSlots.add(index); if (this.draggedItem.count <= 0) this.draggedItem = { type: null, count: 0 }; this.checkRecipes(); this.updateInventoryUI(); }
-        }
+        if (!slot.type || slot.type === this.draggedItem.type) { if (slot.count < limit) { slot.type = this.draggedItem.type; slot.count++; this.draggedItem.count--; this.distributedSlots.add(index); if (this.draggedItem.count <= 0) this.draggedItem = { type: null, count: 0 }; this.checkRecipes(); this.updateInventoryUI(); } }
     }
 
     checkRecipes() {
         const g = this.craftingGrid.map(s => s.type);
-        const matchPattern = (w, h, p) => {
-            for(let y=0; y<=3-h; y++) {
-                for(let x=0; x<=3-w; x++) {
-                    let match = true; let pCount = 0;
-                    for(let py=0; py<h; py++) {
-                        for(let px=0; px<w; px++) {
-                            let gItem = g[(y+py)*3 + (x+px)]; let pItem = p[py*w + px];
-                            if (pItem === 'ANY_PLANKS') { if (gItem !== 'oak_planks' && gItem !== 'birch_planks') match = false; pCount++; } 
-                            else if (pItem !== null) { if (gItem !== pItem) match = false; pCount++; }
-                        }
-                    }
-                    if(match && g.filter(t=>t).length === pCount) return true;
-                }
-            }
-            return false;
-        };
+        const matchPattern = (w, h, p) => { for(let y=0; y<=3-h; y++) { for(let x=0; x<=3-w; x++) { let match = true; let pCount = 0; for(let py=0; py<h; py++) { for(let px=0; px<w; px++) { let gItem = g[(y+py)*3 + (x+px)]; let pItem = p[py*w + px]; if (pItem === 'ANY_PLANKS') { if (gItem !== 'oak_planks' && gItem !== 'birch_planks') match = false; pCount++; } else if (pItem !== null) { if (gItem !== pItem) match = false; pCount++; } } } if(match && g.filter(t=>t).length === pCount) return true; } } return false; };
 
         if (matchPattern(1, 1, ['oak_wood'])) { this.craftingResult = { type: 'oak_planks', count: 4 }; return; }
         if (matchPattern(1, 1, ['birch_wood'])) { this.craftingResult = { type: 'birch_planks', count: 4 }; return; }
@@ -293,17 +239,13 @@ export class Player {
             this.isInvOpen = false; this.isCraftingTableOpen = false; if (!this.isMobile) this.controls.lock(); invScreen.classList.remove('active');
             if (this.draggedItem.type) { 
                 const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5));
-                for(let c=0; c < this.draggedItem.count; c++) {
-                    if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.draggedItem.type });
-                }
+                for(let c=0; c < this.draggedItem.count; c++) { if(window.socket) window.socket.emit('requestDropItem', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.draggedItem.type }); }
                 this.draggedItem = {type: null, count: 0}; 
             }
             for (let i = 0; i < 9; i++) { 
                 if (this.craftingGrid[i].type) { 
                     const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5));
-                    for(let c=0; c < this.craftingGrid[i].count; c++) {
-                        if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.craftingGrid[i].type });
-                    }
+                    for(let c=0; c < this.craftingGrid[i].count; c++) { if(window.socket) window.socket.emit('requestDropItem', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.craftingGrid[i].type }); }
                     this.craftingGrid[i] = {type: null, count: 0}; 
                 } 
             }
@@ -419,8 +361,8 @@ export class Player {
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
                     
-                    if (this.aiController.isHost) { this.aiController.damageMob(hitMob, dmg, this._kbDir); } 
-                    else if (window.socket) { window.socket.emit('clientHitMob', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
+                    // ✨ SERVER AUTHORITY: Attack intent sent
+                    if (window.socket) { window.socket.emit('requestMobAttack', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
                     this.shakeIntensity = 0.3; 
                 }
                 return; 
@@ -431,8 +373,7 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
-                
-                // ✨ SERVER AUTHORITY: Send intent to Break. Wait for server confirmation.
+
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -455,9 +396,8 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    // ✨ SERVER AUTHORITY: Send intent to Place. Wait for server confirmation.
+                    // ✨ SERVER AUTHORITY: Intent to place.
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
-                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -503,11 +443,11 @@ export class Player {
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
-                // ✨ ANTI-DUPE: Send pickup intent. Hide mesh instantly to prevent spam. Wait for Server.
+                // ✨ ANTI-DUPE: Ensure Server responds to intent before inventory increases
                 if(window.socket && !drop.isBeingPickedUp) {
                     drop.isBeingPickedUp = true; 
                     drop.mesh.visible = false; 
-                    window.socket.emit('pickupDrop', drop.id);
+                    window.socket.emit('requestPickup', drop.id);
                 }
             }
         }
@@ -541,7 +481,7 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ SERVER AUTHORITY: Break intent
+                        // ✨ SERVER AUTHORITY: Emits intention, does NOT remove locally until server confirms.
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }

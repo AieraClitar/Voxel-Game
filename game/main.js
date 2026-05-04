@@ -25,7 +25,8 @@ dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024;
 scene.add(dirLight);
 const handLight = new THREE.PointLight(0xffaa44, 0, 14); scene.add(handLight);
 
-const world = new World(scene);
+// Wait for Server to provide the deterministic Seed
+let world = new World(scene, 1); 
 const player = new Player(camera, document.body, world);
 const aiController = new AIController(scene, world, player);
 player.aiController = aiController;
@@ -41,11 +42,9 @@ let localRoomStartTime = Date.now() - (0.25 * 240 * 1000);
 const playerListUI = document.getElementById('playerListUI');
 const ul = document.getElementById('playerList');
 const networkPlayers = new Map();
-let lastMobSync = 0;
 
 window.updatePlayerList = function() {
-    if(!ul) return;
-    ul.innerHTML = `<li>⭐ ${localPlayerName} (You)</li>`;
+    if(!ul) return; ul.innerHTML = `<li>⭐ ${localPlayerName} (You)</li>`;
     networkPlayers.forEach((playerObj) => { ul.innerHTML += `<li>🟢 ${playerObj.userData.playerName || "Guest"}</li>`; });
 }
 
@@ -53,8 +52,7 @@ if (window.io) {
     window.socket = io('https://voxel-server-591c.onrender.com', { transports: ['websocket'] });
 
     function createNameTag(name) {
-        const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 64;
-        const ctx = canvas.getContext('2d');
+        const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 64; const ctx = canvas.getContext('2d');
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.roundRect(16, 8, 224, 48, 8); ctx.fill();
         ctx.font = 'bold 28px monospace'; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.fillText(name, 128, 42); 
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }));
@@ -63,23 +61,15 @@ if (window.io) {
 
     function updateNetworkPlayerItem(group, itemType) {
         if (group.userData.heldItemType === itemType) return;
-        group.userData.heldItemType = itemType;
-        const armR = group.userData.armR;
-        const oldItem = armR.getObjectByName('equippedItem');
-        if (oldItem) armR.remove(oldItem);
-
+        group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); if (oldItem) armR.remove(oldItem);
         if (itemType) {
-            const mat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
-            let mesh;
+            const mat = world.itemMaterials[itemType] || world.itemMaterials['stone']; let mesh;
             if (['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick', 'bow', 'crossbow', 'gun'].includes(itemType)) {
-                mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), mat); mesh.geometry.translate(0.5, 0.5, 0);
-                mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, -Math.PI / 2, 0);
+                mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), mat); mesh.geometry.translate(0.5, 0.5, 0); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, -Math.PI / 2, 0);
             } else if (itemType === 'torch') {
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0);
-                mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat);
-                mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
             }
             mesh.name = 'equippedItem'; mesh.castShadow = true; armR.add(mesh);
         }
@@ -89,17 +79,12 @@ if (window.io) {
         const group = new THREE.Group();
         const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-        
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.5, 0); head.castShadow = true;
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 0.875, 0); body.castShadow = true;
-        const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); 
-        const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
-        const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0);
-        const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
-        const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); 
-        const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
-        const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); 
-        const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
+        const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
+        const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
+        const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
 
         const hpMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({color: 0x00ff00, depthTest: false}));
         hpMesh.position.y = 2.4; hpMesh.name = 'healthBar';
@@ -126,17 +111,22 @@ if (window.io) {
                 document.getElementById('lobby-browser').style.display = 'none'; document.getElementById('main-menu').style.display = 'none';
                 document.getElementById('loading-screen').style.display = 'flex';
                 if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-                world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
                 player.gameActive = true; 
             };
             div.appendChild(info); div.appendChild(joinBtn); serverList.appendChild(div);
         });
     });
 
-    // ✨ FULL WORLD SNAPSHOT ON JOIN
+    // ✨ SERVER SNAPSHOT RECONCILIATION
     window.socket.on('world_snapshot', (data) => {
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
-        window.isHost = data.isHost; aiController.isHost = data.isHost; 
+        
+        // Wipe local world completely and initialize with Server's seed to guarantee matching terrain
+        scene.remove(world.dropGroup); scene.remove(world.particleGroup);
+        for(const chunk of world.chunks.values()) scene.remove(chunk);
+        
+        world = new World(scene, data.seed);
+        player.world = world; aiController.world = world;
         
         Object.keys(data.players).forEach(id => {
             if(id === window.socket.id) return;
@@ -147,19 +137,28 @@ if (window.io) {
         });
         window.updatePlayerList();
 
-        world.serverBlocks.clear();
-        Object.keys(data.blocks).forEach(key => {
-            const [bx, by, bz] = key.split(',').map(Number);
-            world.serverBlocks.set(key, data.blocks[key]);
-            if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
-            else world.addBlock(bx, by, bz, data.blocks[key]);
-        });
-
+        Object.keys(data.blocks).forEach(key => { world.serverBlocks.set(key, data.blocks[key]); });
         Object.values(data.drops).forEach(d => { world.spawnNetworkedDrop(d.id, d.x, d.y, d.z, d.type); });
-        if(!window.isHost) aiController.syncFromServer(data.mobs);
+        aiController.syncFromServer(data.mobs);
+
+        // Force rebuild with Master Seed
+        world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
     });
 
-    // ✨ PERIODIC HARD SYNC
+    // ✨ 20-TPS SERVER TICK ENGINE
+    window.socket.on('server_tick', (data) => {
+        Object.keys(data.players).forEach(id => {
+            if (id === window.socket.id || !networkPlayers.has(id)) return;
+            const p = networkPlayers.get(id); const s = data.players[id];
+            p.userData.targetPos.set(s.x, s.y, s.z); p.userData.targetRy = s.ry; p.userData.targetRx = s.rx;
+            updateNetworkPlayerItem(p, s.heldItem);
+            if (s.isAttacking && p.userData.attackTimer <= 0) p.userData.attackTimer = 0.25;
+            const hpMesh = p.getObjectByName('healthBar'); if(hpMesh) { hpMesh.scale.x = Math.max(0.01, s.health / 100); hpMesh.material.color.setHex(s.health > 50 ? 0x00ff00 : 0xff0000); }
+        });
+        aiController.syncFromServer(data.mobs);
+    });
+
+    // ✨ PERIODIC HARD SYNC (Prevents missed packets)
     window.socket.on('hard_sync', (data) => {
         if(!data.blocks) return;
         Object.keys(data.blocks).forEach(key => {
@@ -176,60 +175,24 @@ if (window.io) {
         window.showChat(`🌍 ${data.player.name || "Guest"} joined the world!`);
         const mesh = createNetworkPlayer(data.player.name || "Guest");
         mesh.position.set(data.player.x, data.player.y, data.player.z);
-        mesh.userData.targetPos.copy(mesh.position);
-        scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
+        mesh.userData.targetPos.copy(mesh.position); scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
     });
 
-    // ✨ SERVER VALIDATED INVENTORY PICKUP
-    window.socket.on('pickupSuccess', (type) => {
-        player.pickupItem(type);
-    });
-
-    window.socket.on('playerMoved', (data) => {
-        if(networkPlayers.has(data.id)) {
-            const p = networkPlayers.get(data.id);
-            p.userData.targetPos.set(data.x, data.y, data.z);
-            p.userData.targetRy = data.ry;
-            p.userData.targetRx = data.rx;
-            
-            updateNetworkPlayerItem(p, data.heldItem);
-            if (data.isAttacking && p.userData.attackTimer <= 0) p.userData.attackTimer = 0.25;
-            
-            const hpMesh = p.getObjectByName('healthBar');
-            if(hpMesh) { hpMesh.scale.x = Math.max(0.01, data.health / 100); hpMesh.material.color.setHex(data.health > 50 ? 0x00ff00 : 0xff0000); }
-        }
-    });
-
+    // Server completely commands the client's inventory and objects
+    window.socket.on('pickupSuccess', (type) => { player.pickupItem(type); });
     window.socket.on('item_spawned', (data) => { world.spawnNetworkedDrop(data.id, data.x, data.y, data.z, data.type); });
     window.socket.on('item_removed', (dropId) => { world.removeNetworkedDrop(dropId); });
-    window.socket.on('mobSync', (data) => { if (!window.isHost) aiController.syncFromServer(data); });
     
-    window.socket.on('mobDamagedByClient', (data) => {
-        if(window.isHost && aiController.mobs.has(data.id)) {
-            aiController.damageMob(aiController.mobs.get(data.id), data.dmg, new THREE.Vector3(data.kbDir.x, data.kbDir.y, data.kbDir.z));
-        }
-    });
+    window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
+    window.socket.on('mobSpawned', (data) => { aiController.spawnMob(data.id, data.type, data.x, data.y, data.z); });
+    window.socket.on('mobKilled', (id) => { aiController.killMobLocal(id); });
 
     window.socket.on('playerDisconnected', (id) => {
-        if(networkPlayers.has(id)) {
-            window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`);
-            scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList();
-        }
+        if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
-    
-    // ✨ SERVER AUTHORITATIVE BLOCK PLACEMENT/REMOVAL
-    window.socket.on('blockUpdate', (data) => { 
-        const key = `${data.x},${data.y},${data.z}`;
-        if(data.action === 'add') {
-            world.serverBlocks.set(key, data.type);
-            world.addBlock(data.x, data.y, data.z, data.type); 
-        } else {
-            world.serverBlocks.set(key, 'air');
-            world.removeBlock(data.x, data.y, data.z, true); 
-        }
-    });
+    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); world.networkAddBlock(data.x, data.y, data.z, data.type); } else { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); world.networkRemoveBlock(data.x, data.y, data.z, true); } });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
@@ -239,7 +202,9 @@ if(closeLobbyBtn) closeLobbyBtn.addEventListener('click', () => { document.getEl
 document.getElementById('btn-play-menu').addEventListener('click', () => {
     localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
     if (window.socket) window.socket.emit('createGame', localPlayerName);
-    AudioSys.init(); document.getElementById('main-menu').style.display = 'none'; document.getElementById('world-menu').style.display = 'flex';
+    AudioSys.init(); document.getElementById('main-menu').style.display = 'none'; document.getElementById('loading-screen').style.display = 'flex';
+    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    player.gameActive = true; 
 });
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); if(playerListUI) playerListUI.style.display = 'block'; }});
@@ -255,14 +220,12 @@ for (let layer = 0; layer < (isMobile ? 1 : 3); layer++) {
     const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({color: 0xffffff, size: 1.0, transparent: true, fog: false}));
     scene.add(stars); starLayers.push(stars);
 }
-
 const texMoon = Textures.generate('moon'); const moon = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 12), new THREE.MeshBasicMaterial({map: texMoon, fog: false, transparent: true})); scene.add(moon);
 const texSun = Textures.generate('sun'); const sunMesh = new THREE.Mesh(new THREE.BoxGeometry(14, 14, 14), new THREE.MeshBasicMaterial({map: texSun, fog: false, transparent: true}));
 const texHalo = Textures.generate('sun_halo'); const sunHalo = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), new THREE.MeshBasicMaterial({map: texHalo, transparent: true, fog: false, blending: THREE.AdditiveBlending, depthWrite: false}));
 sunHalo.position.z = -8; sunMesh.add(sunHalo); scene.add(sunMesh);
 
-const cloudGroup = new THREE.Group();
-const cloudMat = new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
+const cloudGroup = new THREE.Group(); const cloudMat = new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
 for(let i=0; i<(isMobile ? 8 : 20); i++) {
     const cluster = new THREE.Group();
     for(let p=0; p< 2 + Math.floor(Math.random() * 3); p++) {
@@ -273,33 +236,17 @@ for(let i=0; i<(isMobile ? 8 : 20); i++) {
 }
 scene.add(cloudGroup);
 
-const previewCanvas = document.getElementById('preview-canvas');
-const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true });
-previewRenderer.setSize(120, 200, false); previewRenderer.setClearColor(0x000000, 0); 
+const previewCanvas = document.getElementById('preview-canvas'); const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true }); previewRenderer.setSize(120, 200, false); previewRenderer.setClearColor(0x000000, 0); 
 const previewScene = new THREE.Scene(); const previewCamera = new THREE.PerspectiveCamera(50, 120/200, 0.1, 100); previewCamera.position.set(0, -0.25, 4.0); 
-previewScene.add(new THREE.AmbientLight(0xffffff, 1.2));
-const previewDirLight = new THREE.DirectionalLight(0xffffff, 1.5); previewDirLight.position.set(5, 10, 7); previewScene.add(previewDirLight);
+previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight = new THREE.DirectionalLight(0xffffff, 1.5); previewDirLight.position.set(5, 10, 7); previewScene.add(previewDirLight);
 
 const previewPlayer = new THREE.Group();
 const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
 const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 0, 0);
-const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, -0.625, 0);
-const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, -0.625, 0);
-const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, -0.625, 0);
-const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legL.position.set(-0.15, -1.25, 0);
-const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legR.position.set(0.15, -1.25, 0);
-const previewHeldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshLambertMaterial({color: 0xffffff}));
-armR.add(previewHeldBlock); previewPlayer.add(head, body, armL, armR, legL, legR); previewScene.add(previewPlayer);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 0, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, -0.625, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, -0.625, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, -0.625, 0); const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legL.position.set(-0.15, -1.25, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legR.position.set(0.15, -1.25, 0);
+const previewHeldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshLambertMaterial({color: 0xffffff})); armR.add(previewHeldBlock); previewPlayer.add(head, body, armL, armR, legL, legR); previewScene.add(previewPlayer);
 
 let isGeneratingWorld = false; let initialChunksNeeded = 0; let initialChunksDone = 0;
-
-document.getElementById('btn-back-menu').addEventListener('click', () => { document.getElementById('world-menu').style.display = 'none'; document.getElementById('main-menu').style.display = 'flex'; });
-document.getElementById('btn-create-world').addEventListener('click', () => {
-    document.getElementById('world-menu').style.display = 'none'; document.getElementById('loading-screen').style.display = 'flex';
-    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-    world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
-});
 
 const pauseMenu = document.getElementById('pause-menu');
 document.addEventListener('click', (e) => { if (e.target.tagName === 'CANVAS' && player.gameActive && !player.isInvOpen && pauseMenu.style.display !== 'flex' && !isMobile) player.controls.lock(); });
@@ -309,14 +256,11 @@ document.getElementById('btn-resume').addEventListener('click', () => { pauseMen
 
 window.addEventListener('resize', () => { 
     const aspect = window.innerWidth / window.innerHeight; camera.aspect = aspect; camera.updateProjectionMatrix(); 
-    player.tpsCameraBack.aspect = aspect; player.tpsCameraBack.updateProjectionMatrix(); player.tpsCameraFront.aspect = aspect; player.tpsCameraFront.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight); 
+    player.tpsCameraBack.aspect = aspect; player.tpsCameraBack.updateProjectionMatrix(); player.tpsCameraFront.aspect = aspect; player.tpsCameraFront.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); 
 });
 
 const clock = new THREE.Clock(); let chunkTimer = 0; let dayTime = 0.25; let currentShadowFactor = 1.0; let currentCaveFactor = 1.0; 
-const daySky = new THREE.Color(0x60a5fa); const sunsetSky = new THREE.Color(0xf59e0b); const nightSky = new THREE.Color(0x0f172a); const caveColor = new THREE.Color(0x020617);
-const dayCloud = new THREE.Color(0xffffff); const sunsetCloud = new THREE.Color(0xfcb045); const nightCloud = new THREE.Color(0x1e293b);
-const currentSkyColor = new THREE.Color(); const currentCloudColor = new THREE.Color();
+const daySky = new THREE.Color(0x60a5fa); const sunsetSky = new THREE.Color(0xf59e0b); const nightSky = new THREE.Color(0x0f172a); const caveColor = new THREE.Color(0x020617); const dayCloud = new THREE.Color(0xffffff); const sunsetCloud = new THREE.Color(0xfcb045); const nightCloud = new THREE.Color(0x1e293b); const currentSkyColor = new THREE.Color(); const currentCloudColor = new THREE.Color();
 
 function animate() {
     requestAnimationFrame(animate);
@@ -325,7 +269,6 @@ function animate() {
         let startTime = performance.now();
         while (world.chunkQueue.length > 0 && performance.now() - startTime < 16) { world.processChunkQueue(); initialChunksDone++; }
         document.getElementById('loading-progress').style.width = `${(initialChunksDone / initialChunksNeeded) * 100}%`;
-
         if (world.chunkQueue.length === 0) {
             isGeneratingWorld = false; let spawnY = world.getSurfaceHeight(16, 16) + 2;
             player.camera.position.set(16, spawnY, 16); player.velocity.set(0,0,0);
@@ -337,95 +280,58 @@ function animate() {
 
     if (!player.gameActive) return;
     world.processChunkQueue();
-
     const delta = Math.min(clock.getDelta(), 0.1); 
-    dayTime = ((Date.now() - localRoomStartTime) / 1000 / 240.0) % 1;
-    world.sunArc = Math.sin(dayTime * Math.PI * 2); let angle = dayTime * Math.PI * 2;
-
+    dayTime = ((Date.now() - localRoomStartTime) / 1000 / 240.0) % 1; world.sunArc = Math.sin(dayTime * Math.PI * 2); let angle = dayTime * Math.PI * 2;
     document.getElementById('time-indicator').style.left = `${dayTime * 100}%`; document.getElementById('time-indicator').innerText = (dayTime > 0.5 && dayTime < 1.0) ? '🌙' : '☀️';
 
     let hasRoof = false; let roofType = 'air';
     const bx = Math.round(player.camera.position.x); const bz = Math.round(player.camera.position.z); const by = Math.round(player.camera.position.y + 1.0); 
     for (let y = by; y <= by + 50; y++) { const type = world.getBlockType(bx, y, bz); if (type !== 'air' && type !== 'water' && type !== 'torch') { hasRoof = true; roofType = type; break; } }
-
-    let targetShadowFactor = hasRoof ? (roofType === 'leaves' || roofType.includes('wood') ? 0.4 : 0.0) : 1.0;
-    let targetCaveFactor = hasRoof && !roofType.includes('wood') && roofType !== 'leaves' ? 0.0 : 1.0;
+    let targetShadowFactor = hasRoof ? (roofType === 'leaves' || roofType.includes('wood') ? 0.4 : 0.0) : 1.0; let targetCaveFactor = hasRoof && !roofType.includes('wood') && roofType !== 'leaves' ? 0.0 : 1.0;
     currentShadowFactor += (targetShadowFactor - currentShadowFactor) * delta * 3.0; currentCaveFactor += (targetCaveFactor - currentCaveFactor) * delta * 3.0;
 
     const px = player.camera.position.x; const pz = player.camera.position.z;
     sunMesh.position.set(px + Math.cos(angle) * 250, Math.sin(angle) * 250, pz + Math.sin(angle) * 80); sunMesh.lookAt(player.camera.position); dirLight.position.copy(sunMesh.position);
     moon.position.set(px + Math.cos(angle + Math.PI) * 250, Math.sin(angle + Math.PI) * 250, pz + Math.sin(angle + Math.PI) * 80); moon.lookAt(player.camera.position); 
-
     dirLight.intensity = Math.max(0, world.sunArc) * 1.5 * currentShadowFactor; hemiLight.intensity = Math.max(0.1, world.sunArc) * 0.6 * currentCaveFactor; 
 
     if (world.sunArc > 0.2) { currentSkyColor.copy(daySky); currentCloudColor.copy(dayCloud); }
     else if (world.sunArc > 0) { currentSkyColor.lerpColors(sunsetSky, daySky, world.sunArc / 0.2); currentCloudColor.lerpColors(sunsetCloud, dayCloud, world.sunArc / 0.2); }
     else { currentSkyColor.lerpColors(nightSky, sunsetSky, Math.max(0, (world.sunArc + 0.2) / 0.2)); currentCloudColor.lerpColors(nightCloud, sunsetCloud, Math.max(0, (world.sunArc + 0.2) / 0.2)); }
     
-    currentSkyColor.lerp(caveColor, 1.0 - currentCaveFactor); scene.background = currentSkyColor; scene.fog.color = currentSkyColor;
-    scene.fog.near = 2 + (13 * currentCaveFactor); scene.fog.far = 15 + (45 * currentCaveFactor); 
+    currentSkyColor.lerp(caveColor, 1.0 - currentCaveFactor); scene.background = currentSkyColor; scene.fog.color = currentSkyColor; scene.fog.near = 2 + (13 * currentCaveFactor); scene.fog.far = 15 + (45 * currentCaveFactor); 
     sunMesh.material.opacity = currentCaveFactor; sunHalo.material.opacity = currentCaveFactor; moon.material.opacity = currentCaveFactor;
 
     let baseStarOpacity = world.sunArc < 0 ? Math.min(1.0, Math.abs(world.sunArc)) : 0;
     starLayers.forEach((layer, i) => { layer.rotation.y += delta * 0.01; layer.position.set(px, 0, pz); layer.material.opacity = baseStarOpacity * (0.5 + 0.5 * Math.sin(performance.now() * 0.002 + (i * 2))) * currentCaveFactor; });
     cloudGroup.children.forEach(c => { c.position.x += delta * 3; if (c.position.x > 125) c.position.x = -125; c.children.forEach(p => { p.material.color.copy(currentCloudColor); p.material.opacity = 0.9 * currentCaveFactor; }); }); cloudGroup.position.set(px, 0, pz); 
 
-    const selectedItem = player.inventory[player.selectedSlot];
-    handLight.intensity = (selectedItem && selectedItem.type === 'torch' && selectedItem.count > 0) ? 10 + (Math.random() * 2) : 0;
+    const selectedItem = player.inventory[player.selectedSlot]; handLight.intensity = (selectedItem && selectedItem.type === 'torch' && selectedItem.count > 0) ? 10 + (Math.random() * 2) : 0;
     if (handLight.intensity > 0) handLight.position.copy(player.camera.position);
 
-    player.update(delta);
-    aiController.update(delta);
-    world.updateDrops(delta); world.updateLights();
+    player.update(delta); aiController.update(delta); world.updateDrops(delta); world.updateLights();
 
     networkPlayers.forEach(p => {
-        const dist = p.position.distanceTo(p.userData.targetPos);
         p.position.lerp(p.userData.targetPos, 15 * delta); 
         p.rotation.y = THREE.MathUtils.lerp(p.rotation.y, p.userData.targetRy, 15 * delta);
         p.userData.head.rotation.x = THREE.MathUtils.lerp(p.userData.head.rotation.x, p.userData.targetRx, 15 * delta);
 
-        if (dist > 0.02) {
-            p.userData.swingTime += 0.5; let swing = Math.sin(p.userData.swingTime) * 0.5;
-            p.userData.legL.rotation.x = swing; p.userData.legR.rotation.x = -swing;
-            if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = -swing; p.userData.armR.rotation.x = swing; }
+        if (p.position.distanceTo(p.userData.targetPos) > 0.02) {
+            p.userData.swingTime += 0.5; let swing = Math.sin(p.userData.swingTime) * 0.5; p.userData.legL.rotation.x = swing; p.userData.legR.rotation.x = -swing; if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = -swing; p.userData.armR.rotation.x = swing; }
         } else {
-            p.userData.legL.rotation.x = THREE.MathUtils.lerp(p.userData.legL.rotation.x, 0, 10 * delta);
-            p.userData.legR.rotation.x = THREE.MathUtils.lerp(p.userData.legR.rotation.x, 0, 10 * delta);
-            if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = THREE.MathUtils.lerp(p.userData.armL.rotation.x, 0, 10 * delta); p.userData.armR.rotation.x = THREE.MathUtils.lerp(p.userData.armR.rotation.x, 0, 10 * delta); }
+            p.userData.legL.rotation.x = THREE.MathUtils.lerp(p.userData.legL.rotation.x, 0, 10 * delta); p.userData.legR.rotation.x = THREE.MathUtils.lerp(p.userData.legR.rotation.x, 0, 10 * delta); if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = THREE.MathUtils.lerp(p.userData.armL.rotation.x, 0, 10 * delta); p.userData.armR.rotation.x = THREE.MathUtils.lerp(p.userData.armR.rotation.x, 0, 10 * delta); }
         }
-
-        if(p.userData.attackTimer > 0) {
-            p.userData.attackTimer -= delta;
-            let strike = Math.sin((1.0 - (p.userData.attackTimer / 0.25)) * Math.PI) * 1.5;
-            p.userData.armR.rotation.x = strike;
-        }
+        if(p.userData.attackTimer > 0) { p.userData.attackTimer -= delta; p.userData.armR.rotation.x = Math.sin((1.0 - (p.userData.attackTimer / 0.25)) * Math.PI) * 1.5; }
     });
-
-    if (window.isHost && window.socket) {
-        if (performance.now() - lastMobSync > 100) { 
-            const syncData = aiController.getSyncData();
-            if (syncData) window.socket.emit('mobSync', syncData);
-            lastMobSync = performance.now();
-        }
-    }
     
-    chunkTimer += delta;
-    if (chunkTimer > 0.5) { world.updateChunks(player.camera.position); chunkTimer = 0; }
+    chunkTimer += delta; if (chunkTimer > 0.5) { world.updateChunks(player.camera.position); chunkTimer = 0; }
     renderer.render(scene, player.getActiveCamera());
 
     if (document.getElementById('inventory-screen').classList.contains('active')) {
-        previewPlayer.rotation.y = Math.PI + Math.sin(performance.now() * 0.001) * 0.3; 
-        if (previewHeldBlock.geometry) previewHeldBlock.geometry.dispose();
-        
+        previewPlayer.rotation.y = Math.PI + Math.sin(performance.now() * 0.001) * 0.3; if (previewHeldBlock.geometry) previewHeldBlock.geometry.dispose();
         if (selectedItem !== null && selectedItem.count > 0) {
             previewHeldBlock.visible = true; let mat = world.itemMaterials[selectedItem.type] || world.itemMaterials['stone'];
-            if (['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selectedItem.type)) {
-                previewHeldBlock.material = mat; previewHeldBlock.geometry = new THREE.PlaneGeometry(1.0, 1.0); previewHeldBlock.geometry.translate(0.5, 0.5, 0); previewHeldBlock.position.set(0, -0.375, -0.15); previewHeldBlock.rotation.set(0, Math.PI / 2, 0); 
-            } else if (selectedItem.type === 'torch') {
-                previewHeldBlock.material = mat; previewHeldBlock.geometry = new THREE.BoxGeometry(0.08, 0.5, 0.08); previewHeldBlock.geometry.translate(0, 0.25, 0); previewHeldBlock.position.set(0, -0.375, -0.15); previewHeldBlock.rotation.set(Math.PI / 8, 0, 0);
-            } else {
-                previewHeldBlock.material = mat; previewHeldBlock.geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25); previewHeldBlock.position.set(0, -0.25, -0.15); previewHeldBlock.rotation.set(Math.PI/8, Math.PI / 4, 0);
-            }
+            if (['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selectedItem.type)) { previewHeldBlock.material = mat; previewHeldBlock.geometry = new THREE.PlaneGeometry(1.0, 1.0); previewHeldBlock.geometry.translate(0.5, 0.5, 0); previewHeldBlock.position.set(0, -0.375, -0.15); previewHeldBlock.rotation.set(0, Math.PI / 2, 0); } else if (selectedItem.type === 'torch') { previewHeldBlock.material = mat; previewHeldBlock.geometry = new THREE.BoxGeometry(0.08, 0.5, 0.08); previewHeldBlock.geometry.translate(0, 0.25, 0); previewHeldBlock.position.set(0, -0.375, -0.15); previewHeldBlock.rotation.set(Math.PI / 8, 0, 0); } else { previewHeldBlock.material = mat; previewHeldBlock.geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25); previewHeldBlock.position.set(0, -0.25, -0.15); previewHeldBlock.rotation.set(Math.PI/8, Math.PI / 4, 0); }
         } else { previewHeldBlock.visible = false; }
         previewRenderer.render(previewScene, previewCamera);
     }
