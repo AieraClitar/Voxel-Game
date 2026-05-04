@@ -6,7 +6,6 @@ import { AIController } from './ai/AIController.js';
 import { AudioSys } from './utils/AudioSys.js';
 
 const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
-
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0x87CEEB, 15, 60); 
 
@@ -14,8 +13,7 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4); scene.add(hemiLight);
@@ -25,7 +23,6 @@ dirLight.shadow.camera.left = -50; dirLight.shadow.camera.right = 50;
 dirLight.shadow.camera.near = 0.1; dirLight.shadow.camera.far = 200;
 dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024;
 scene.add(dirLight);
-
 const handLight = new THREE.PointLight(0xffaa44, 0, 14); scene.add(handLight);
 
 const world = new World(scene);
@@ -39,9 +36,6 @@ window.showChat = (msg) => {
     feed.appendChild(el); setTimeout(() => { if(el.parentNode) el.remove(); }, 6000);
 };
 
-// ==========================================
-// ✨ AUTHORITATIVE LOBBY SYSTEM
-// ==========================================
 let localPlayerName = "Guest";
 let localRoomStartTime = Date.now() - (0.25 * 240 * 1000); 
 const playerListUI = document.getElementById('playerListUI');
@@ -64,8 +58,7 @@ if (window.io) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.roundRect(16, 8, 224, 48, 8); ctx.fill();
         ctx.font = 'bold 28px monospace'; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.fillText(name, 128, 42); 
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }));
-        sprite.scale.set(2, 0.5, 1); sprite.position.y = 2.0; 
-        return sprite;
+        sprite.scale.set(2, 0.5, 1); sprite.position.y = 2.0; return sprite;
     }
 
     function updateNetworkPlayerItem(group, itemType) {
@@ -78,9 +71,13 @@ if (window.io) {
         if (itemType) {
             const mat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
             let mesh;
+            // ✨ FIX: Properly scales and renders tools vs torches vs blocks
             if (['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick', 'bow', 'crossbow', 'gun'].includes(itemType)) {
                 mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), mat); mesh.geometry.translate(0.5, 0.5, 0);
                 mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, -Math.PI / 2, 0);
+            } else if (itemType === 'torch') {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0);
+                mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
                 mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat);
                 mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
@@ -91,9 +88,7 @@ if (window.io) {
 
     function createNetworkPlayer(playerName) {
         const group = new THREE.Group();
-        const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); 
-        const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); 
-        const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
+        const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
         
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.5, 0); head.castShadow = true;
@@ -112,7 +107,9 @@ if (window.io) {
         hpMesh.position.y = 2.4; hpMesh.name = 'healthBar';
         
         group.add(head, body, armL, armR, legL, legR, createNameTag(playerName || "Guest"), hpMesh);
-        group.userData = { head, armL, armR, legL, legR, swingTime: 0, playerName, attackTimer: 0 };
+        
+        // Target Pos/Rot for Lerping
+        group.userData = { head, armL, armR, legL, legR, swingTime: 0, playerName, attackTimer: 0, targetPos: new THREE.Vector3(), targetRy: 0, targetRx: 0 };
         return group;
     }
 
@@ -133,6 +130,8 @@ if (window.io) {
                 document.getElementById('lobby-browser').style.display = 'none'; document.getElementById('main-menu').style.display = 'none';
                 document.getElementById('loading-screen').style.display = 'flex';
                 if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+                
+                // Force chunks to start generating
                 world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
                 player.gameActive = true; 
             };
@@ -140,58 +139,62 @@ if (window.io) {
         });
     });
 
-    window.socket.on('currentPlayers', (data) => {
+    // ✨ RECEIVE FULL WORLD SNAPSHOT
+    window.socket.on('world_snapshot', (data) => {
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
-        window.isHost = data.isHost; aiController.isHost = data.isHost; // Assings Authority
+        window.isHost = data.isHost; aiController.isHost = data.isHost; 
         
-        const players = data.players;
-        Object.keys(players).forEach(id => {
+        // 1. Sync Players
+        Object.keys(data.players).forEach(id => {
             if(id === window.socket.id) return;
-            const mesh = createNetworkPlayer(players[id].name);
-            mesh.position.set(players[id].x, players[id].y, players[id].z);
+            const mesh = createNetworkPlayer(data.players[id].name);
+            mesh.position.set(data.players[id].x, data.players[id].y, data.players[id].z);
+            mesh.userData.targetPos.copy(mesh.position);
             scene.add(mesh); networkPlayers.set(id, mesh);
         });
         window.updatePlayerList();
+
+        // 2. Sync World Blocks (Host's placed/removed blocks)
+        data.blocks.forEach(b => {
+            if (b.action === 'add') world.addBlock(b.x, b.y, b.z, b.type);
+            else world.removeBlock(b.x, b.y, b.z, true); // True prevents it from spawning local drop duplicates
+        });
+
+        // 3. Sync Drops
+        Object.values(data.drops).forEach(d => { world.spawnNetworkedDrop(d.id, d.x, d.y, d.z, d.type); });
+
+        // 4. Sync Mobs
+        if(!window.isHost) aiController.syncFromServer(data.mobs);
     });
 
     window.socket.on('newPlayer', (data) => {
         window.showChat(`🌍 ${data.player.name || "Guest"} joined the world!`);
         const mesh = createNetworkPlayer(data.player.name || "Guest");
         mesh.position.set(data.player.x, data.player.y, data.player.z);
+        mesh.userData.targetPos.copy(mesh.position);
         scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
     });
 
-    // ✨ RECEIVE FULL PLAYER STATE
+    // ✨ REAL-TIME PLAYER STATE INTERPOLATION
     window.socket.on('playerMoved', (data) => {
         if(networkPlayers.has(data.id)) {
             const p = networkPlayers.get(data.id);
-            const dist = p.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z));
-            
-            p.position.lerp(new THREE.Vector3(data.x, data.y, data.z), 0.4);
-            p.rotation.y = data.ry; p.userData.head.rotation.x = data.rx; 
+            p.userData.targetPos.set(data.x, data.y, data.z);
+            p.userData.targetRy = data.ry;
+            p.userData.targetRx = data.rx;
             
             updateNetworkPlayerItem(p, data.heldItem);
             if (data.isAttacking && p.userData.attackTimer <= 0) p.userData.attackTimer = 0.25;
             
             const hpMesh = p.getObjectByName('healthBar');
             if(hpMesh) { hpMesh.scale.x = Math.max(0.01, data.health / 100); hpMesh.material.color.setHex(data.health > 50 ? 0x00ff00 : 0xff0000); }
-
-            if (dist > 0.05) {
-                p.userData.swingTime += 0.5; let swing = Math.sin(p.userData.swingTime) * 0.5;
-                p.userData.legL.rotation.x = swing; p.userData.legR.rotation.x = -swing;
-                if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = -swing; p.userData.armR.rotation.x = swing; }
-            } else {
-                p.userData.legL.rotation.x = THREE.MathUtils.lerp(p.userData.legL.rotation.x, 0, 0.1);
-                p.userData.legR.rotation.x = THREE.MathUtils.lerp(p.userData.legR.rotation.x, 0, 0.1);
-                if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = THREE.MathUtils.lerp(p.userData.armL.rotation.x, 0, 0.1); p.userData.armR.rotation.x = THREE.MathUtils.lerp(p.userData.armR.rotation.x, 0, 0.1); }
-            }
         }
     });
 
-    // ✨ CLIENT: RECEIVES MOBS FROM HOST
+    window.socket.on('item_spawned', (data) => { world.spawnNetworkedDrop(data.id, data.x, data.y, data.z, data.type); });
+    window.socket.on('item_removed', (dropId) => { world.removeNetworkedDrop(dropId); });
     window.socket.on('mobSync', (data) => { if (!window.isHost) aiController.syncFromServer(data); });
     
-    // ✨ HOST: RECEIVES DAMAGE FROM CLIENT
     window.socket.on('mobDamagedByClient', (data) => {
         if(window.isHost && aiController.mobs.has(data.id)) {
             aiController.damageMob(aiController.mobs.get(data.id), data.dmg, new THREE.Vector3(data.kbDir.x, data.kbDir.y, data.kbDir.z));
@@ -206,10 +209,9 @@ if (window.io) {
     });
 
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
-    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') world.addBlock(data.x, data.y, data.z, data.type); else world.removeBlock(data.x, data.y, data.z); });
+    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') world.addBlock(data.x, data.y, data.z, data.type); else world.removeBlock(data.x, data.y, data.z, true); });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
-// LOBBY MENU CONTROLS
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
 const closeLobbyBtn = document.getElementById('close-lobby');
 if(closeLobbyBtn) closeLobbyBtn.addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'none'; });
@@ -225,7 +227,6 @@ document.addEventListener('keyup', (e) => { if (e.key === 'Tab') { if(playerList
 const mobileTabBtn = document.getElementById('mobileTabBtn');
 if (mobileTabBtn) { if (isMobile) mobileTabBtn.style.display = 'flex'; mobileTabBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playerListUI.style.display = (playerListUI.style.display === 'none' || playerListUI.style.display === '') ? 'block' : 'none'; }); }
 
-// SCENE DECORATIONS
 const starLayers = [];
 for (let layer = 0; layer < (isMobile ? 1 : 3); layer++) {
     const starGeo = new THREE.BufferGeometry(); const starVertices = [];
@@ -357,22 +358,37 @@ function animate() {
     aiController.update(delta);
     world.updateDrops(delta); world.updateLights();
 
-    // ✨ HOST EMIT: BROADCAST MOB STATES
-    if (window.isHost && window.socket) {
-        if (performance.now() - lastMobSync > 100) { // Limit bandwidth
-            const syncData = aiController.getSyncData();
-            if (syncData) window.socket.emit('mobSync', syncData);
-            lastMobSync = performance.now();
-        }
-    }
-
+    // ✨ APPLY LERP INTERPOLATION TO REMOTE PLAYERS TO STOP FREEZING
     networkPlayers.forEach(p => {
+        const dist = p.position.distanceTo(p.userData.targetPos);
+        p.position.lerp(p.userData.targetPos, 15 * delta); // Smooth movement
+        p.rotation.y = THREE.MathUtils.lerp(p.rotation.y, p.userData.targetRy, 15 * delta);
+        p.userData.head.rotation.x = THREE.MathUtils.lerp(p.userData.head.rotation.x, p.userData.targetRx, 15 * delta);
+
+        if (dist > 0.02) {
+            p.userData.swingTime += 0.5; let swing = Math.sin(p.userData.swingTime) * 0.5;
+            p.userData.legL.rotation.x = swing; p.userData.legR.rotation.x = -swing;
+            if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = -swing; p.userData.armR.rotation.x = swing; }
+        } else {
+            p.userData.legL.rotation.x = THREE.MathUtils.lerp(p.userData.legL.rotation.x, 0, 10 * delta);
+            p.userData.legR.rotation.x = THREE.MathUtils.lerp(p.userData.legR.rotation.x, 0, 10 * delta);
+            if(p.userData.attackTimer <= 0) { p.userData.armL.rotation.x = THREE.MathUtils.lerp(p.userData.armL.rotation.x, 0, 10 * delta); p.userData.armR.rotation.x = THREE.MathUtils.lerp(p.userData.armR.rotation.x, 0, 10 * delta); }
+        }
+
         if(p.userData.attackTimer > 0) {
             p.userData.attackTimer -= delta;
             let strike = Math.sin((1.0 - (p.userData.attackTimer / 0.25)) * Math.PI) * 1.5;
             p.userData.armR.rotation.x = strike;
         }
     });
+
+    if (window.isHost && window.socket) {
+        if (performance.now() - lastMobSync > 100) { 
+            const syncData = aiController.getSyncData();
+            if (syncData) window.socket.emit('mobSync', syncData);
+            lastMobSync = performance.now();
+        }
+    }
     
     chunkTimer += delta;
     if (chunkTimer > 0.5) { world.updateChunks(player.camera.position); chunkTimer = 0; }
