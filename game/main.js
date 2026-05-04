@@ -71,7 +71,6 @@ if (window.io) {
         if (itemType) {
             const mat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
             let mesh;
-            // ✨ FIX: Properly scales and renders tools vs torches vs blocks
             if (['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick', 'bow', 'crossbow', 'gun'].includes(itemType)) {
                 mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), mat); mesh.geometry.translate(0.5, 0.5, 0);
                 mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, -Math.PI / 2, 0);
@@ -102,13 +101,10 @@ if (window.io) {
         const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); 
         const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
 
-        // Network Health Bar
         const hpMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({color: 0x00ff00, depthTest: false}));
         hpMesh.position.y = 2.4; hpMesh.name = 'healthBar';
         
         group.add(head, body, armL, armR, legL, legR, createNameTag(playerName || "Guest"), hpMesh);
-        
-        // Target Pos/Rot for Lerping
         group.userData = { head, armL, armR, legL, legR, swingTime: 0, playerName, attackTimer: 0, targetPos: new THREE.Vector3(), targetRy: 0, targetRx: 0 };
         return group;
     }
@@ -137,12 +133,11 @@ if (window.io) {
         });
     });
 
-    // ✨ RECEIVE FULL WORLD SNAPSHOT
+    // ✨ FULL WORLD SNAPSHOT ON JOIN
     window.socket.on('world_snapshot', (data) => {
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         window.isHost = data.isHost; aiController.isHost = data.isHost; 
         
-        // 1. Sync Players
         Object.keys(data.players).forEach(id => {
             if(id === window.socket.id) return;
             const mesh = createNetworkPlayer(data.players[id].name);
@@ -152,16 +147,16 @@ if (window.io) {
         });
         window.updatePlayerList();
 
-        // 2. Sync World Blocks (Host's placed/removed blocks)
-        data.blocks.forEach(b => {
-            if (b.action === 'add') world.addBlock(b.x, b.y, b.z, b.type);
-            else world.removeBlock(b.x, b.y, b.z, true); // True prevents it from spawning local drop duplicates
+        // Overwrite local terrain with Server Authority blocks
+        world.serverBlocks.clear();
+        Object.keys(data.blocks).forEach(key => {
+            const [bx, by, bz] = key.split(',').map(Number);
+            world.serverBlocks.set(key, data.blocks[key]);
+            if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
+            else world.addBlock(bx, by, bz, data.blocks[key]);
         });
 
-        // 3. Sync Drops
         Object.values(data.drops).forEach(d => { world.spawnNetworkedDrop(d.id, d.x, d.y, d.z, d.type); });
-
-        // 4. Sync Mobs
         if(!window.isHost) aiController.syncFromServer(data.mobs);
     });
 
@@ -173,7 +168,11 @@ if (window.io) {
         scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
     });
 
-    // ✨ REAL-TIME PLAYER STATE INTERPOLATION
+    // ✨ ANTI-DUPE: Client only receives inventory when Server allows it
+    window.socket.on('pickupSuccess', (type) => {
+        player.pickupItem(type);
+    });
+
     window.socket.on('playerMoved', (data) => {
         if(networkPlayers.has(data.id)) {
             const p = networkPlayers.get(data.id);
@@ -356,10 +355,9 @@ function animate() {
     aiController.update(delta);
     world.updateDrops(delta); world.updateLights();
 
-    // ✨ APPLY LERP INTERPOLATION TO REMOTE PLAYERS TO STOP FREEZING
     networkPlayers.forEach(p => {
         const dist = p.position.distanceTo(p.userData.targetPos);
-        p.position.lerp(p.userData.targetPos, 15 * delta); // Smooth movement
+        p.position.lerp(p.userData.targetPos, 15 * delta); 
         p.rotation.y = THREE.MathUtils.lerp(p.rotation.y, p.userData.targetRy, 15 * delta);
         p.userData.head.rotation.x = THREE.MathUtils.lerp(p.userData.head.rotation.x, p.userData.targetRx, 15 * delta);
 
