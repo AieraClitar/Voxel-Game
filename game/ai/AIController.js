@@ -54,7 +54,10 @@ export class AIController {
         this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
-        this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.5, 0.25); 
+        // ✨ THE FIX: Legs are properly sized to 0.75 height to close the gap
+        this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); 
+        this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.75, 0.25); 
+        
         this.fireParticles = []; this.fireMat = new THREE.MeshBasicMaterial({color: 0xff5500, transparent: true, opacity: 0.8});
     }
 
@@ -66,12 +69,13 @@ export class AIController {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
         
-        // ✨ PERFECT ALIGNMENT: Bottom of legs is Y=0
-        const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.5, 0); head.castShadow = true;
-        const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 0.875, 0); torso.castShadow = true;
+        // ✨ PERFECT ALIGNMENT: 
+        // Torso is 0.75 tall. Legs are 0.75 tall. Total height = 1.5. Head = 0.5. Overall height = 2.0.
+        const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
+        const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
         
-        const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
-        const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
+        const armL = new THREE.Group(); armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        const armR = new THREE.Group(); armR.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
@@ -80,8 +84,9 @@ export class AIController {
             weaponMesh.castShadow = true; armR.add(weaponMesh);
         }
 
-        const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); const legLMesh = new THREE.Mesh(this.geoLeg, matPants); legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
-        const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); const legRMesh = new THREE.Mesh(this.geoLeg, matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
+        // Pivots perfectly at the waist
+        const legL = new THREE.Group(); legL.position.set(-0.15, 0.75, 0); const legLMesh = new THREE.Mesh(this.geoLeg, matPants); legLMesh.position.y = -0.375; legLMesh.castShadow = true; legL.add(legLMesh);
+        const legR = new THREE.Group(); legR.position.set(0.15, 0.75, 0); const legRMesh = new THREE.Mesh(this.geoLeg, matPants); legRMesh.position.y = -0.375; legRMesh.castShadow = true; legR.add(legRMesh);
 
         mobGroup.add(head, torso, armL, armR, legL, legR);
         mobGroup.position.set(x, y, z); this.scene.add(mobGroup);
@@ -148,7 +153,6 @@ export class AIController {
 
             let dx = projGroup.position.x - this.player.camera.position.x; let dz = projGroup.position.z - this.player.camera.position.z; let dy = projGroup.position.y - this.player.camera.position.y;
             if (Math.sqrt(dx*dx + dz*dz) < 0.6 && dy < 0.2 && dy > -1.6) {
-                 if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: type==='gun'?35:type==='crossbow'?25:15, source: type });
                  this.scene.remove(projGroup); clearInterval(projInterval);
             } else if (this.world.getBlockType(Math.round(projGroup.position.x), Math.round(projGroup.position.y), Math.round(projGroup.position.z)) !== 'air') {
                  this.scene.remove(projGroup); clearInterval(projInterval);
@@ -201,8 +205,7 @@ export class AIController {
                 this.scene.add(f); this.fireParticles.push({mesh: f, life: 1.0});
             }
             
-            // ✨ FIX: Base height is 1.5. Perfectly matches Torso. No more floating heads!
-            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, 1.5 + Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
+            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, 1.75 + Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
             mob.armL.rotation.x = THREE.MathUtils.lerp(mob.armL.rotation.x, targetArmLX, 12 * delta);
             mob.armR.rotation.x = THREE.MathUtils.lerp(mob.armR.rotation.x, targetArmRX, 15 * delta);
             mob.legL.rotation.x = THREE.MathUtils.lerp(mob.legL.rotation.x, targetLegLX, 15 * delta);

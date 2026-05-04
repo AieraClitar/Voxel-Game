@@ -81,12 +81,14 @@ if (window.io) {
         const group = new THREE.Group();
         const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
+        
+        // ✨ THE FIX: Gapless Player Rig to match standard geometry
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); body.castShadow = true;
         const armL = new THREE.Group(); armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
         const armR = new THREE.Group(); armR.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
-        const legL = new THREE.Group(); legL.position.set(-0.15, 0.5, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; legLMesh.castShadow = true; legL.add(legLMesh);
-        const legR = new THREE.Group(); legR.position.set(0.15, 0.5, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; legRMesh.castShadow = true; legR.add(legRMesh);
+        const legL = new THREE.Group(); legL.position.set(-0.15, 0.75, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legLMesh.position.y = -0.375; legLMesh.castShadow = true; legL.add(legLMesh);
+        const legR = new THREE.Group(); legR.position.set(0.15, 0.75, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legRMesh.position.y = -0.375; legRMesh.castShadow = true; legR.add(legRMesh);
 
         const hpMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({color: 0x00ff00, depthTest: false}));
         hpMesh.position.y = 2.4; hpMesh.name = 'healthBar';
@@ -194,13 +196,7 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    
-    window.socket.on('mobKilled', (data) => { 
-        aiController.killMobLocal(data.mobId); 
-        window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); 
-    });
-
-    // ✨ SILENT DESPAWN: Removes mob from screen without broadcasting chat spam!
+    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); });
     window.socket.on('mobDespawned', (mobId) => { aiController.killMobLocal(mobId); });
 
     window.socket.on('playerDisconnected', (id) => {
@@ -208,7 +204,18 @@ if (window.io) {
     });
 
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
-    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); world.addBlock(data.x, data.y, data.z, data.type, null, true); } else { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); world.removeBlock(data.x, data.y, data.z, false, true); } });
+    window.socket.on('blockUpdate', (data) => { 
+        const dist = player.camera.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z));
+        if(data.action === 'add') { 
+            world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); 
+            world.addBlock(data.x, data.y, data.z, data.type, null, true); 
+            if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass(dist);
+        } else { 
+            world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); 
+            world.removeBlock(data.x, data.y, data.z, false, true); 
+            if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(dist);
+        } 
+    });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
@@ -259,7 +266,7 @@ previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight =
 const previewPlayer = new THREE.Group();
 const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
 const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 0, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, -0.625, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, -0.625, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, -0.625, 0); const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legL.position.set(-0.15, -1.25, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legR.position.set(0.15, -1.25, 0);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
 const previewHeldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshLambertMaterial({color: 0xffffff})); armR.add(previewHeldBlock); previewPlayer.add(head, body, armL, armR, legL, legR); previewScene.add(previewPlayer);
 
 let isGeneratingWorld = false; let initialChunksNeeded = 0; let initialChunksDone = 0;

@@ -62,13 +62,14 @@ export class Player {
         const matPants = new THREE.MeshLambertMaterial({color: 0x222255}); const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat]; 
         
+        // ✨ THE FIX: Seamless unified skeleton hierarchy
         this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); this.head.position.set(0, 1.75, 0); 
         this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, 1.125, 0); 
         this.armL = new THREE.Group(); this.armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
         this.armR_3rd = new THREE.Group(); this.armR_3rd.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; this.armR_3rd.add(armRMesh);
         
-        this.legL = new THREE.Group(); this.legL.position.set(-0.15, 0.5, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; this.legL.add(legLMesh);
-        this.legR = new THREE.Group(); this.legR.position.set(0.15, 0.5, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; this.legR.add(legRMesh);
+        this.legL = new THREE.Group(); this.legL.position.set(-0.15, 0.75, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legLMesh.position.y = -0.375; this.legL.add(legLMesh);
+        this.legR = new THREE.Group(); this.legR.position.set(0.15, 0.75, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legRMesh.position.y = -0.375; this.legR.add(legRMesh);
 
         this.bodyGroup.add(this.head, this.torso, this.armL, this.armR_3rd, this.legL, this.legR);
         this.legSwingTimer = 0; this.raycaster = new THREE.Raycaster(); this.initControls(); this.updateInventoryUI(); 
@@ -298,8 +299,7 @@ export class Player {
             if (this.draggedItem.type !== null && this.draggedItem.count > 0) { dragEl.style.display = 'block'; if (this.uiIcons[this.draggedItem.type]) dragEl.appendChild(this.uiIcons[this.draggedItem.type].cloneNode()); const countSpan = document.createElement('span'); countSpan.className = 'item-count'; countSpan.innerText = this.draggedItem.count; dragEl.appendChild(countSpan); } else { dragEl.style.display = 'none'; }
         }
 
-        const selected = this.inventory[this.selectedSlot]; 
-        const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
         const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) { this.arm.remove(old1st); if(old1st.geometry) old1st.geometry.dispose(); }
         const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) { this.armR_3rd.remove(old3rd); if(old3rd.geometry) old3rd.geometry.dispose(); }
@@ -309,7 +309,6 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                // ✨ FIX: Properly attaches 3D weapon meshes to player views!
                 mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, -0.4, 0); mesh1st.rotation.set(Math.PI/2, 0, 0); 
                 mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.75, 0); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
@@ -383,13 +382,6 @@ export class Player {
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
 
-                // ✨ CLIENT PREDICTION: Instant Local Breaking for smooth gameplay!
-                if (type === 'torch') {
-                    this.world.removeBlock(bx, by, bz); 
-                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
-                    break; 
-                }
-
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -412,10 +404,7 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    // ✨ CLIENT PREDICTION: Instant Local Placing for smooth gameplay!
-                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
-                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -470,7 +459,10 @@ export class Player {
         if (this.shakeIntensity > 0) { this.camera.position.x += (Math.random() - 0.5) * this.shakeIntensity * 0.1; this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity * 0.1; this.camera.position.z += (Math.random() - 0.5) * this.shakeIntensity * 0.1; this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 3); }
         if (this.muzzleFlash.intensity > 0) this.muzzleFlash.intensity = Math.max(0, this.muzzleFlash.intensity - delta * 100);
 
-        this.bodyGroup.position.copy(this.camera.position); this._euler.setFromQuaternion(this.camera.quaternion, 'YXZ'); this.bodyGroup.rotation.y = this._euler.y;
+        // ✨ THE FIX: Anchor the 3D body directly to the feet, not the eyes!
+        this.bodyGroup.position.set(this.camera.position.x, this.camera.position.y - 1.5, this.camera.position.z); 
+        this._euler.setFromQuaternion(this.camera.quaternion, 'YXZ'); 
+        this.bodyGroup.rotation.y = this._euler.y;
 
         let targetArmRX = 0, targetArmLX = 0, targetLegRX = 0, targetLegLX = 0;
         if (this.canJump && horizSpeed > 1) { this.legSwingTimer += delta * 15; let swing = Math.sin(this.legSwingTimer) * 0.5; targetLegLX = swing; targetLegRX = -swing; targetArmLX = -swing; targetArmRX = swing; }
@@ -496,6 +488,7 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
+                        this.world.removeBlock(bx, by, bz); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
