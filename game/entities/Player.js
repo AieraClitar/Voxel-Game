@@ -99,7 +99,7 @@ export class Player {
             const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5)); 
             
-            // ✨ SERVER AUTHORITY: Client only emits intent. Drop renders when Server Broadcasts it.
+            // ✨ SERVER AUTHORITY: Client only emits intent.
             if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: item.type });
             
             item.count--; if (item.count <= 0) item.type = null;
@@ -294,7 +294,6 @@ export class Player {
             if (this.draggedItem.type) { 
                 const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5));
                 for(let c=0; c < this.draggedItem.count; c++) {
-                    // ✨ EMIT DROPS TO SERVER
                     if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.draggedItem.type });
                 }
                 this.draggedItem = {type: null, count: 0}; 
@@ -303,7 +302,6 @@ export class Player {
                 if (this.craftingGrid[i].type) { 
                     const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5));
                     for(let c=0; c < this.craftingGrid[i].count; c++) {
-                        // ✨ EMIT DROPS TO SERVER
                         if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.craftingGrid[i].type });
                     }
                     this.craftingGrid[i] = {type: null, count: 0}; 
@@ -421,7 +419,6 @@ export class Player {
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
                     
-                    // ✨ AUTHORITY SYNC: Send hit intent to Host to validate and execute
                     if (this.aiController.isHost) { this.aiController.damageMob(hitMob, dmg, this._kbDir); } 
                     else if (window.socket) { window.socket.emit('clientHitMob', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
                     this.shakeIntensity = 0.3; 
@@ -434,13 +431,8 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
-                if (type === 'torch') { 
-                    this.world.removeBlock(bx, by, bz); 
-                    if(window.socket) window.socket.emit('blockUpdate', {action: 'remove', x: bx, y: by, z: bz});
-                    if(window.socket) window.socket.emit('spawnDrop', { x: bx, y: by, z: bz, type: 'torch' });
-                    if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); break; 
-                }
-
+                
+                // ✨ SERVER AUTHORITY: Send intent to Break
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -462,8 +454,9 @@ export class Player {
                     if (selected.type === 'torch' && type === 'leaves') break; if (type === 'torch') break; 
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
-                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
-                    if(window.socket) window.socket.emit('blockUpdate', {action: 'add', x: nx, y: ny, z: nz, type: selected.type});
+                    
+                    // ✨ SERVER AUTHORITY: Send intent to Place
+                    if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -509,9 +502,11 @@ export class Player {
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
-                // ✨ AUTHORITY SYNC: Send pickup intent. Will only work if server validates it.
-                if (this.pickupItem(drop.type)) { 
-                    if(window.socket) window.socket.emit('pickupDrop', drop.id);
+                // ✨ DUPLICATION FIX: Do not increment inventory. Ask server, and hide local mesh immediately!
+                if(window.socket && !drop.isBeingPickedUp) {
+                    drop.isBeingPickedUp = true; // Prevent spamming
+                    window.socket.emit('pickupDrop', { id: drop.id, type: drop.type });
+                    this.world.removeNetworkedDrop(drop.id);
                 }
             }
         }
@@ -542,12 +537,11 @@ export class Player {
                     stillLookingAtTarget = true; this.miningTimer += delta;
                     this.miningIndicator.position.set(bx, by, bz); this.miningIndicator.material.opacity = (this.miningTimer / this.miningDurability) * 0.8;
                     let progressEl = document.getElementById('mining-progress'); if(progressEl) progressEl.style.width = `${Math.min(100, (this.miningTimer / this.miningDurability) * 100)}%`;
+                    
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        this.world.removeBlock(bx, by, bz);
-                        if(window.socket) window.socket.emit('blockUpdate', {action: 'remove', x: bx, y: by, z: bz});
-                        if(window.socket) window.socket.emit('spawnDrop', { x: bx, y: by, z: bz, type: blockType });
-                        if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock();
+                        // ✨ SERVER AUTHORITY: Client only emits intent. Blocks are deleted ONLY when server updates.
+                        if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
                 }
