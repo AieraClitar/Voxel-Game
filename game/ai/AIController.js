@@ -7,13 +7,12 @@ export class AIController {
         this.scene = scene;
         this.world = world;
         this.player = player;
-        this.mobs = new Map(); // Converted to Map for strict Network ID Sync
+        this.mobs = new Map(); 
         this.projectiles = [];
         this.spawnTimer = 0;
         this.maxMobs = 10;
         this.mobIdCounter = 0;
         
-        // ✨ AUTHORITY FLAG: Set when joining/hosting
         this.isHost = false; 
         
         this.meleeTools = ['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick'];
@@ -43,7 +42,7 @@ export class AIController {
     }
 
     attemptSpawn() {
-        if (!this.isHost) return; // ONLY THE HOST CAN CREATE MOBS
+        if (!this.isHost) return; 
         let dist = 15 + Math.random() * 25;
         let angle = Math.random() * Math.PI * 2;
         let sx = this.player.camera.position.x + Math.cos(angle) * dist;
@@ -101,7 +100,7 @@ export class AIController {
             id: id, type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head, weaponType: weaponType,
             health: 100, velocity: new THREE.Vector3(0, 0, 0), swingTime: Math.random() * 10,
             attackTimer: 0, attackAnimTimer: 0, hitFlinch: 0, isGrounded: false, speed: isZombie ? 3.5 : 2.5, burnTimer: 0, shadeTarget: null,
-            jumpCooldown: 0, targetPos: new THREE.Vector3(x, y, z), targetRy: 0, targetRx: 0 // Interpolation vars
+            jumpCooldown: 0, targetPos: new THREE.Vector3(x, y, z), targetRy: 0, targetRx: 0 
         };
 
         mobGroup.traverse((child) => { child.userData = { isMob: true, mobRef: mobObj }; });
@@ -109,7 +108,7 @@ export class AIController {
     }
 
     damageMob(mob, amount, knockbackDir) {
-        if (!this.isHost) return; // ONLY HOST APPLIES TRUE DAMAGE
+        if (!this.isHost) return; 
         mob.health -= amount;
         let dist = mob.mesh.position.distanceTo(this.player.camera.position);
         AudioSys.hitFlesh(dist);
@@ -181,7 +180,6 @@ export class AIController {
         return false;
     }
 
-    // ✨ GATHER DATA FOR CLIENTS
     getSyncData() {
         if (!this.isHost) return null;
         const data = [];
@@ -196,9 +194,8 @@ export class AIController {
         return data;
     }
 
-    // ✨ UPDATE CLIENTS FROM HOST DATA
     syncFromServer(dataList) {
-        if (this.isHost) return;
+        if (this.isHost || !dataList) return;
         const currentIds = new Set(dataList.map(d => d.id));
         
         for (let id of this.mobs.keys()) {
@@ -242,7 +239,6 @@ export class AIController {
         }
 
         if (this.isHost) {
-            // ✨ HOST LOGIC: Full Physics & Pathing
             this.spawnTimer += delta;
             if (this.spawnTimer > 8.0 && this.mobs.size < this.maxMobs) { this.spawnTimer = 0; this.attemptSpawn(); }
             
@@ -315,7 +311,6 @@ export class AIController {
                 this.updateAnimations(mob, delta, isMoving);
             }
         } else {
-            // ✨ CLIENT LOGIC: Perfect Lerp Interpolation
             for (let [id, mob] of this.mobs) {
                 const prevX = mob.mesh.position.x;
                 mob.mesh.position.lerp(mob.targetPos, 15 * delta);
