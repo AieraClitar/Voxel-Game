@@ -16,6 +16,9 @@ export class World {
         this.heightMap = new SimpleNoise(42); this.roughMap = new SimpleNoise(1337); this.tempMap = new SimpleNoise(555); this.humidMap = new SimpleNoise(999); this.treeMap = new SimpleNoise(888); 
         this.chunkData = new Map(); this.chunks = new Map(); this.chunkDataState = new Map(); this.chunkMeshState = new Map(); 
         this.torchNormals = new Map(); this.lightSources = new Map(); this.chunkQueue = []; this.sunArc = 0;
+        
+        // ✨ SERVER TRUTH CACHE
+        this.serverBlocks = new Map();
 
         this.drops = []; this.dropGroup = new THREE.Group(); this.scene.add(this.dropGroup);
         this.particles = []; this.particleGroup = new THREE.Group(); this.scene.add(this.particleGroup); this.geoParticle = new THREE.BoxGeometry(0.1, 0.1, 0.1);
@@ -88,7 +91,11 @@ export class World {
             if (this.getBlockType(tx, ty, tz) === 'torch') {
                 const normal = this.torchNormals.get(`${tx},${ty},${tz}`); let attached = false;
                 if (off.f === 'y' && (!normal || normal.y === 1)) attached = true; if (off.f === 'x1' && normal && normal.x === 1) attached = true; if (off.f === 'x-1' && normal && normal.x === -1) attached = true; if (off.f === 'z1' && normal && normal.z === 1) attached = true; if (off.f === 'z-1' && normal && normal.z === -1) attached = true;
-                if (attached) { this.removeBlock(tx, ty, tz); if(window.socket) window.socket.emit('spawnDrop', {x:tx,y:ty,z:tz,type:'torch'}); }
+                
+                // ✨ AUTHORITY SYNC: Intent to break torch!
+                if (attached) { 
+                    if(window.socket) window.socket.emit('requestBlockBreak', {x:tx, y:ty, z:tz, type:'torch'}); 
+                }
             }
         }
     }
@@ -135,6 +142,20 @@ export class World {
                 for(let ly = h - 2; ly <= h + 1; ly++) { let radius = ly === h + 1 ? 1.5 : 2.5; for(let lx = -2; lx <= 2; lx++) { for(let lz = -2; lz <= 2; lz++) { if (lx === 0 && lz === 0 && ly < h) continue; if (lx*lx + lz*lz <= radius*radius) { this.setBlockData(pos.x + lx, pos.y + ly, pos.z + lz, 11); } } } }
             }
         });
+
+        // ✨ SERVER TRUTH OVERRIDE
+        // Prevents terrain generator from restoring destroyed blocks!
+        if (this.serverBlocks) {
+            for (let [key, typeStr] of this.serverBlocks.entries()) {
+                const [bx, by, bz] = key.split(',').map(Number);
+                if (Math.floor(bx / CHUNK_SIZE) === cx && Math.floor(bz / CHUNK_SIZE) === cz) {
+                    const typeId = typeStr === 'air' ? 0 : BLOCK_TYPES[typeStr];
+                    const idx = this.getBlockIndex(bx - cx*CHUNK_SIZE, by + Y_OFFSET, bz - cz*CHUNK_SIZE);
+                    if (idx !== -1) data[idx] = typeId;
+                }
+            }
+        }
+
         this.chunkDataState.set(cKey, 'done');
     }
 
@@ -216,7 +237,6 @@ export class World {
         }
     }
 
-    // ✨ MULTIPLAYER DROPS: Network explicit ID system
     spawnNetworkedDrop(id, x, y, z, typeStr) {
         if (typeStr === 'air' || typeStr === 'water' || this.drops.some(d => d.id === id)) return;
         const geo = typeStr === 'torch' ? this.dropGeoTorch : this.dropGeoBlock;
