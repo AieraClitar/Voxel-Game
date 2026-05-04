@@ -7,10 +7,14 @@ export class AIController {
         this.scene = scene;
         this.world = world;
         this.player = player;
-        this.mobs = [];
+        this.mobs = new Map(); // Converted to Map for strict Network ID Sync
         this.projectiles = [];
         this.spawnTimer = 0;
         this.maxMobs = 10;
+        this.mobIdCounter = 0;
+        
+        // ✨ AUTHORITY FLAG: Assigned in main.js
+        this.isHost = false; 
         
         this.meleeTools = ['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick'];
         this.rangedTools = ['bow', 'crossbow', 'gun'];
@@ -39,6 +43,7 @@ export class AIController {
     }
 
     attemptSpawn() {
+        if (!this.isHost) return; // ONLY THE HOST CAN CREATE MOBS
         let dist = 15 + Math.random() * 25;
         let angle = Math.random() * Math.PI * 2;
         let sx = this.player.camera.position.x + Math.cos(angle) * dist;
@@ -46,10 +51,13 @@ export class AIController {
         
         let sy = 30;
         while(sy > -30) { if (this.world.hasBlock(Math.floor(sx), Math.floor(sy), Math.floor(sz))) break; sy--; }
-        if (sy > -30) this.spawnMob(Math.random() > 0.5 ? 'zombie' : 'archer', sx, sy + 1.5, sz);
+        if (sy > -30) {
+            const id = 'mob_' + this.mobIdCounter++;
+            this.spawnMob(id, Math.random() > 0.5 ? 'zombie' : 'archer', sx, sy + 1.5, sz);
+        }
     }
 
-    spawnMob(type, x, y, z) {
+    spawnMob(id, type, x, y, z) {
         const mobGroup = new THREE.Group();
         const isZombie = type === 'zombie';
         
@@ -58,9 +66,6 @@ export class AIController {
         const matPants = isZombie ? this.matZombiePants.clone() : this.matArcherPants.clone();
         
         let faceTexKey = isZombie ? 'zombie_face' : 'archer_face';
-        const rand = Math.random();
-        if (isZombie) { if (rand < 0.3) faceTexKey = 'zombie_face_var1'; else if (rand < 0.6) faceTexKey = 'zombie_face_var2'; } 
-        else { if (rand < 0.5) faceTexKey = 'archer_face_var1'; }
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceTexKey) });
         
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat];
@@ -93,17 +98,18 @@ export class AIController {
         this.scene.add(mobGroup);
 
         const mobObj = {
-            type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head, weaponType: weaponType,
+            id: id, type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head, weaponType: weaponType,
             health: 100, velocity: new THREE.Vector3(0, 0, 0), swingTime: Math.random() * 10,
             attackTimer: 0, attackAnimTimer: 0, hitFlinch: 0, isGrounded: false, speed: isZombie ? 3.5 : 2.5, burnTimer: 0, shadeTarget: null,
-            jumpCooldown: 0 // ✨ BUG FIX: Added isolated jump cooldown to stop infinite bouncing
+            jumpCooldown: 0, targetPos: new THREE.Vector3(x, y, z), targetRy: 0, targetRx: 0 // Client Sync vars
         };
 
         mobGroup.traverse((child) => { child.userData = { isMob: true, mobRef: mobObj }; });
-        this.mobs.push(mobObj);
+        this.mobs.set(id, mobObj);
     }
 
     damageMob(mob, amount, knockbackDir) {
+        if (!this.isHost) return; // ONLY HOST APPLIES TRUE DAMAGE
         mob.health -= amount;
         let dist = mob.mesh.position.distanceTo(this.player.camera.position);
         AudioSys.hitFlesh(dist);
@@ -130,17 +136,16 @@ export class AIController {
         mob.hitFlinch = 1.0; 
 
         if (mob.health <= 0) {
-            if(window.showChat) window.showChat(`⚔️ You slaughtered a ${mob.type.toUpperCase()}!`);
+            if(window.showChat) window.showChat(`⚔️ A ${mob.type.toUpperCase()} was slain!`);
             this.scene.remove(mob.mesh);
             mob.mesh.children.forEach(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => m.dispose()); else child.material.dispose(); }});
-            this.mobs = this.mobs.filter(m => m !== mob);
+            this.mobs.delete(mob.id);
         }
     }
 
     shootProjectile(fromPos, toPos, type) {
         const isGun = type === 'gun';
         const speed = isGun ? 60 : 30;
-        
         const mesh = new THREE.Mesh(isGun ? this.geoBullet : this.geoArrow, isGun ? this.matBullet : this.matArrow);
         mesh.position.set(fromPos.x, fromPos.y - 0.2, fromPos.z); 
         this.scene.add(mesh);
@@ -149,18 +154,13 @@ export class AIController {
         isGun ? AudioSys.shootGun(distToPlayer) : AudioSys.shootBow(distToPlayer);
         
         const dir = new THREE.Vector3().subVectors(toPos, mesh.position);
-        const distance = dir.length();
-        dir.normalize();
-        
+        const distance = dir.length(); dir.normalize();
         const timeToTarget = distance / speed;
         const dropCompensation = 0.5 * 15.0 * (timeToTarget * timeToTarget);
         
-        const targetPos = toPos.clone();
-        targetPos.y += dropCompensation;
-        
+        const targetPos = toPos.clone(); targetPos.y += dropCompensation;
         const trueVel = new THREE.Vector3().subVectors(targetPos, mesh.position).normalize().multiplyScalar(speed);
         mesh.lookAt(targetPos);
-
         this.projectiles.push({ mesh: mesh, vel: trueVel, life: 0, isGun: isGun });
     }
 
@@ -181,15 +181,53 @@ export class AIController {
         return false;
     }
 
-    update(delta) {
-        this.spawnTimer += delta;
-        if (this.spawnTimer > 8.0 && this.mobs.length < this.maxMobs) { this.spawnTimer = 0; this.attemptSpawn(); }
+    // ✨ GATHER DATA FOR CLIENTS
+    getSyncData() {
+        if (!this.isHost) return null;
+        const data = [];
+        for (let [id, mob] of this.mobs) {
+            data.push({
+                id: id, type: mob.type, weapon: mob.weaponType,
+                x: mob.mesh.position.x, y: mob.mesh.position.y, z: mob.mesh.position.z,
+                ry: mob.mesh.rotation.y, rx: mob.mesh.rotation.x,
+                health: mob.health, anim: mob.attackAnimTimer > 0 
+            });
+        }
+        return data;
+    }
 
+    // ✨ UPDATE CLIENTS FROM HOST DATA
+    syncFromServer(dataList) {
+        if (this.isHost) return;
+        const currentIds = new Set(dataList.map(d => d.id));
+        
+        // Remove dead mobs
+        for (let id of this.mobs.keys()) {
+            if (!currentIds.has(id)) {
+                this.scene.remove(this.mobs.get(id).mesh);
+                this.mobs.delete(id);
+            }
+        }
+
+        for (let data of dataList) {
+            if (!this.mobs.has(data.id)) {
+                this.spawnMob(data.id, data.type, data.x, data.y, data.z);
+                this.mobs.get(data.id).weaponType = data.weapon;
+            }
+            const mob = this.mobs.get(data.id);
+            mob.targetPos.set(data.x, data.y, data.z);
+            mob.targetRy = data.ry; mob.targetRx = data.rx;
+            mob.health = data.health;
+            if (data.anim && mob.attackAnimTimer <= 0) mob.attackAnimTimer = 0.5;
+        }
+    }
+
+    update(delta) {
         const px = this.player.camera.position.x; const py = this.player.camera.position.y; const pz = this.player.camera.position.z;
 
+        // Projectiles (handled locally by everyone)
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             let p = this.projectiles[i]; p.life += delta;
-            
             p.vel.y -= 15.0 * delta; 
             p.mesh.position.addScaledVector(p.vel, delta);
             p.mesh.lookAt(p.mesh.position.clone().add(p.vel)); 
@@ -205,150 +243,115 @@ export class AIController {
             }
         }
 
-        let isDay = this.world.sunArc > 0.1;
-
-        for (let i = this.mobs.length - 1; i >= 0; i--) {
-            let mob = this.mobs[i]; let mesh = mob.mesh;
-            let isMoving = false; let isBurning = false; let targetX = 0; let targetZ = 0;
+        if (this.isHost) {
+            // ✨ HOST LOGIC: Full Physics & Pathing
+            this.spawnTimer += delta;
+            if (this.spawnTimer > 8.0 && this.mobs.size < this.maxMobs) { this.spawnTimer = 0; this.attemptSpawn(); }
             
-            // ✨ BUG FIX: Reduce jump cooldown tracker
-            if (mob.jumpCooldown > 0) mob.jumpCooldown -= delta;
+            let isDay = this.world.sunArc > 0.1;
+            for (let [id, mob] of this.mobs) {
+                let mesh = mob.mesh; let isMoving = false; let isBurning = false; let targetX = 0; let targetZ = 0;
+                if (mob.jumpCooldown > 0) mob.jumpCooldown -= delta;
 
-            if (mob.type === 'zombie' && isDay && mob.isGrounded) {
-                if (!this.world.hasRoof(mesh.position.x, mesh.position.y, mesh.position.z)) {
-                    isBurning = true; mob.burnTimer += delta;
-                    if (Math.random() < 0.2) {
-                        mesh.children[0].material.forEach(m => { if(m && m.emissive) m.emissive.setHex(0xff5500); });
-                        setTimeout(() => { if(mesh) mesh.children[0].material.forEach(m => { if(m && m.emissive) m.emissive.setHex(0x000000); }); }, 150);
-                    }
-                    if (mob.burnTimer > 1.0) { this.damageMob(mob, 8, new THREE.Vector3(0,0,0)); mob.burnTimer = 0; }
-                } else { mob.burnTimer = 0; }
-            }
-
-            if (isBurning) {
-                if (!mob.shadeTarget) {
-                    let foundShade = false;
-                    for (let rx = -6; rx <= 6; rx += 2) {
-                        for (let rz = -6; rz <= 6; rz += 2) {
-                            let tx = mesh.position.x + rx; let tz = mesh.position.z + rz;
-                            if (this.world.hasRoof(tx, mesh.position.y, tz) && !this.checkCollision(tx, mesh.position.y, tz)) {
-                                mob.shadeTarget = new THREE.Vector3(tx, mesh.position.y, tz); foundShade = true; break;
-                            }
-                        }
-                        if (foundShade) break;
-                    }
-                    if (!foundShade) { let angle = Math.random() * Math.PI * 2; mob.shadeTarget = new THREE.Vector3(mesh.position.x + Math.cos(angle)*5, mesh.position.y, mesh.position.z + Math.sin(angle)*5); }
+                if (mob.type === 'zombie' && isDay && mob.isGrounded) {
+                    if (!this.world.hasRoof(mesh.position.x, mesh.position.y, mesh.position.z)) {
+                        isBurning = true; mob.burnTimer += delta;
+                        if (mob.burnTimer > 1.0) { this.damageMob(mob, 8, new THREE.Vector3(0,0,0)); mob.burnTimer = 0; }
+                    } else { mob.burnTimer = 0; }
                 }
 
-                let dx = mob.shadeTarget.x - mesh.position.x; let dz = mob.shadeTarget.z - mesh.position.z;
-                let dist = Math.sqrt(dx*dx + dz*dz);
-                
-                let targetRot = Math.atan2(-dx, -dz);
-                let diff = targetRot - mesh.rotation.y;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                mesh.rotation.y += diff * 5 * delta;
-                
-                isMoving = true; targetX = (dx / dist) * (mob.speed * 1.5); targetZ = (dz / dist) * (mob.speed * 1.5);
-                if (dist < 1.0) mob.shadeTarget = null; 
-            } else {
-                let dx = px - mesh.position.x; let dz = pz - mesh.position.z;
-                let dist = Math.sqrt(dx*dx + dz*dz);
-                
-                if (mob.isGrounded && mob.hitFlinch <= 0.1) {
-                    let targetRot = Math.atan2(-dx, -dz);
-                    let diff = targetRot - mesh.rotation.y;
-                    while (diff < -Math.PI) diff += Math.PI * 2;
-                    while (diff > Math.PI) diff -= Math.PI * 2;
-                    mesh.rotation.y += diff * 8 * delta;
-                }
-
-                if (mob.type === 'zombie') {
-                    if (dist > 1.0 && dist < 40.0 && mob.isGrounded && mob.attackTimer <= 0) { isMoving = true; targetX = (dx / dist) * mob.speed; targetZ = (dz / dist) * mob.speed; }
-                    mob.attackTimer -= delta;
-                    if (mob.attackTimer <= 0 && dist <= 1.8 && Math.abs(mesh.position.y - py) < 2.0 && mob.isGrounded) {
-                         mob.attackAnimTimer = 0.3; mob.attackTimer = 1.5; AudioSys.hitFlesh(dist); AudioSys.hurt(); this.player.shakeIntensity = 0.6;
-                         this.player.takeDamage(15, 'Zombie'); this._kbDir.set(dx, 0, dz).normalize();
-                         this.player.velocity.x = this._kbDir.x * 15; this.player.velocity.z = this._kbDir.z * 15; this.player.velocity.y = 8;              
+                if (isBurning) {
+                    // Find shade logic...
+                    if (!mob.shadeTarget) { let angle = Math.random() * Math.PI * 2; mob.shadeTarget = new THREE.Vector3(mesh.position.x + Math.cos(angle)*5, mesh.position.y, mesh.position.z + Math.sin(angle)*5); }
+                    let dx = mob.shadeTarget.x - mesh.position.x; let dz = mob.shadeTarget.z - mesh.position.z;
+                    let dist = Math.sqrt(dx*dx + dz*dz);
+                    let diff = Math.atan2(-dx, -dz) - mesh.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2; while (diff > Math.PI) diff -= Math.PI * 2;
+                    mesh.rotation.y += diff * 5 * delta;
+                    isMoving = true; targetX = (dx / dist) * (mob.speed * 1.5); targetZ = (dz / dist) * (mob.speed * 1.5);
+                    if (dist < 1.0) mob.shadeTarget = null; 
+                } else {
+                    let dx = px - mesh.position.x; let dz = pz - mesh.position.z;
+                    let dist = Math.sqrt(dx*dx + dz*dz);
+                    if (mob.isGrounded && mob.hitFlinch <= 0.1) {
+                        let diff = Math.atan2(-dx, -dz) - mesh.rotation.y;
+                        while (diff < -Math.PI) diff += Math.PI * 2; while (diff > Math.PI) diff -= Math.PI * 2;
+                        mesh.rotation.y += diff * 8 * delta;
                     }
-                } else if (mob.type === 'archer') {
-                    if (dist > 18.0 && dist < 40.0 && mob.isGrounded && mob.attackTimer <= 0.5) { 
-                        isMoving = true; targetX = (dx / dist) * mob.speed; targetZ = (dz / dist) * mob.speed; 
-                    } else if (dist < 8.0 && mob.isGrounded) {
-                        isMoving = true; targetX = -(dx / dist) * mob.speed; targetZ = -(dz / dist) * mob.speed; 
-                    }
-                    
-                    if (dist <= 25.0 && mob.isGrounded) {
+                    if (mob.type === 'zombie') {
+                        if (dist > 1.0 && dist < 40.0 && mob.isGrounded && mob.attackTimer <= 0) { isMoving = true; targetX = (dx / dist) * mob.speed; targetZ = (dz / dist) * mob.speed; }
                         mob.attackTimer -= delta;
-                        if (mob.attackTimer <= 0) { mob.attackTimer = 3.0; mob.attackAnimTimer = 0.5; this.shootProjectile(mesh.position, this.player.camera.position, mob.weaponType); }
+                        if (mob.attackTimer <= 0 && dist <= 1.8 && Math.abs(mesh.position.y - py) < 2.0 && mob.isGrounded) {
+                            mob.attackAnimTimer = 0.3; mob.attackTimer = 1.5; AudioSys.hitFlesh(dist); AudioSys.hurt(); this.player.shakeIntensity = 0.6;
+                            this.player.takeDamage(15, 'Zombie'); this._kbDir.set(dx, 0, dz).normalize();
+                            this.player.velocity.x = this._kbDir.x * 15; this.player.velocity.z = this._kbDir.z * 15; this.player.velocity.y = 8;              
+                        }
+                    } else if (mob.type === 'archer') {
+                        if (dist > 18.0 && dist < 40.0 && mob.isGrounded && mob.attackTimer <= 0.5) { isMoving = true; targetX = (dx / dist) * mob.speed; targetZ = (dz / dist) * mob.speed; } 
+                        else if (dist < 8.0 && mob.isGrounded) { isMoving = true; targetX = -(dx / dist) * mob.speed; targetZ = -(dz / dist) * mob.speed; }
+                        if (dist <= 25.0 && mob.isGrounded) {
+                            mob.attackTimer -= delta;
+                            if (mob.attackTimer <= 0) { mob.attackTimer = 3.0; mob.attackAnimTimer = 0.5; this.shootProjectile(mesh.position, this.player.camera.position, mob.weaponType); }
+                        }
                     }
                 }
-            }
 
-            mob.velocity.x += (targetX - mob.velocity.x) * 10 * delta; mob.velocity.z += (targetZ - mob.velocity.z) * 10 * delta;
-            let moveX = mob.velocity.x * delta; let moveZ = mob.velocity.z * delta;
-            
-            // ✨ BUG FIX: Removed setting velocity to 0 upon collision. 
-            // This maintains forward pressure against the wall, pulling them gracefully over the ledge once they jump!
-            mesh.position.x += moveX; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.x -= moveX; }
-            mesh.position.z += moveZ; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.z -= moveZ; }
+                mob.velocity.x += (targetX - mob.velocity.x) * 10 * delta; mob.velocity.z += (targetZ - mob.velocity.z) * 10 * delta;
+                let moveX = mob.velocity.x * delta; let moveZ = mob.velocity.z * delta;
+                mesh.position.x += moveX; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.x -= moveX; }
+                mesh.position.z += moveZ; if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) { mesh.position.z -= moveZ; }
 
-            mob.velocity.y -= 25.0 * delta; let moveY = mob.velocity.y * delta; let nextY = mesh.position.y + moveY;
-            if (this.checkCollision(mesh.position.x, nextY, mesh.position.z)) {
-                if (mob.velocity.y < 0) { mob.velocity.y = 0; mob.isGrounded = true; mesh.position.y = Math.floor(nextY - 1.5 + 0.5) + 0.5 + 1.5; } 
-                else if (mob.velocity.y > 0) { mob.velocity.y = 0; mesh.position.y = Math.floor(nextY + 0.25 + 0.5) - 0.5 - 0.25; }
-            } else { mesh.position.y = nextY; mob.isGrounded = false; }
+                mob.velocity.y -= 25.0 * delta; let moveY = mob.velocity.y * delta; let nextY = mesh.position.y + moveY;
+                if (this.checkCollision(mesh.position.x, nextY, mesh.position.z)) {
+                    if (mob.velocity.y < 0) { mob.velocity.y = 0; mob.isGrounded = true; mesh.position.y = Math.floor(nextY - 1.5 + 0.5) + 0.5 + 1.5; } 
+                    else if (mob.velocity.y > 0) { mob.velocity.y = 0; mesh.position.y = Math.floor(nextY + 0.25 + 0.5) - 0.5 - 0.25; }
+                } else { mesh.position.y = nextY; mob.isGrounded = false; }
 
-            // ✨ BUG FIX: Improved jump logic with Head Collision detection and Cooldown
-            if (isMoving && mob.isGrounded && mob.jumpCooldown <= 0) {
-                let mx = -Math.sin(mesh.rotation.y); let mz = -Math.cos(mesh.rotation.y);
-                let checkFront = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 0.1, mesh.position.z + mz * 0.6);
-                let checkAboveFront = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 1.2, mesh.position.z + mz * 0.6);
-                let checkAboveSelf = this.checkCollision(mesh.position.x, mesh.position.y + 2.0, mesh.position.z); // Don't jump if under a roof!
-                
-                if (checkFront && !checkAboveFront && !checkAboveSelf) { 
-                    mob.velocity.y = 8.5; 
-                    mob.isGrounded = false; 
-                    mob.jumpCooldown = 0.5; // Apply a 0.5s cooldown so they don't stutter jump
+                if (isMoving && mob.isGrounded && mob.jumpCooldown <= 0) {
+                    let mx = -Math.sin(mesh.rotation.y); let mz = -Math.cos(mesh.rotation.y);
+                    let checkFront = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 0.1, mesh.position.z + mz * 0.6);
+                    let checkAboveFront = this.checkCollision(mesh.position.x + mx * 0.6, mesh.position.y + 1.2, mesh.position.z + mz * 0.6);
+                    let checkAboveSelf = this.checkCollision(mesh.position.x, mesh.position.y + 2.0, mesh.position.z);
+                    if (checkFront && !checkAboveFront && !checkAboveSelf) { mob.velocity.y = 8.5; mob.isGrounded = false; mob.jumpCooldown = 0.5; }
                 }
+                if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) mesh.position.y += 2.0 * delta; 
+                this.updateAnimations(mob, delta, isMoving);
             }
-
-            if (this.checkCollision(mesh.position.x, mesh.position.y, mesh.position.z)) mesh.position.y += 2.0 * delta; 
-
-            let targetArmLX = 0, targetArmRX = 0, targetLegLX = 0, targetLegRX = 0, targetBodyRotX = 0;
-
-            if (mob.type === 'archer' && mob.attackTimer < 1.0) {
-                targetArmRX = -Math.PI / 2; 
-                targetArmLX = -Math.PI / 2;
+        } else {
+            // ✨ CLIENT LOGIC: Perfect Lerp Interpolation
+            for (let [id, mob] of this.mobs) {
+                const prevX = mob.mesh.position.x;
+                mob.mesh.position.lerp(mob.targetPos, 15 * delta);
+                mob.mesh.rotation.y = THREE.MathUtils.lerp(mob.mesh.rotation.y, mob.targetRy, 15 * delta);
+                mob.mesh.rotation.x = THREE.MathUtils.lerp(mob.mesh.rotation.x, mob.targetRx, 15 * delta);
+                
+                const isMoving = Math.abs(mob.mesh.position.x - prevX) > 0.01;
+                this.updateAnimations(mob, delta, isMoving);
             }
-
-            if (mob.attackAnimTimer > 0) {
-                mob.attackAnimTimer -= delta;
-                let strike = Math.sin((mob.attackAnimTimer / (mob.type === 'archer' ? 0.5 : 0.3)) * Math.PI) * 1.5;
-                if(mob.type === 'archer') { targetArmRX = -Math.PI/2 - strike*0.5; targetArmLX = -Math.PI/2; } 
-                else targetArmRX = strike; 
-            }
-
-            if (isMoving && mob.isGrounded) {
-                mob.swingTime += delta * 15;
-                let swing = Math.sin(mob.swingTime) * 0.6;
-                targetLegLX = swing; targetLegRX = -swing;
-                if(mob.attackAnimTimer <= 0 && mob.attackTimer > 1.0) targetArmRX = swing;
-                if(mob.attackTimer > 1.0) targetArmLX = -swing;
-            }
-
-            if (mob.hitFlinch > 0) {
-                mob.hitFlinch -= delta * 3;
-                targetBodyRotX = -0.5 * mob.hitFlinch; 
-            }
-            
-            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
-
-            mob.armL.rotation.x = THREE.MathUtils.lerp(mob.armL.rotation.x, targetArmLX, 12 * delta);
-            mob.armR.rotation.x = THREE.MathUtils.lerp(mob.armR.rotation.x, targetArmRX, 15 * delta);
-            mob.legL.rotation.x = THREE.MathUtils.lerp(mob.legL.rotation.x, targetLegLX, 15 * delta);
-            mob.legR.rotation.x = THREE.MathUtils.lerp(mob.legR.rotation.x, targetLegRX, 15 * delta);
-            mesh.rotation.x = THREE.MathUtils.lerp(mesh.rotation.x, targetBodyRotX, 15 * delta);
         }
+    }
+
+    updateAnimations(mob, delta, isMoving) {
+        let targetArmLX = 0, targetArmRX = 0, targetLegLX = 0, targetLegRX = 0, targetBodyRotX = 0;
+        if (mob.type === 'archer' && mob.attackTimer < 1.0) { targetArmRX = -Math.PI / 2; targetArmLX = -Math.PI / 2; }
+        if (mob.attackAnimTimer > 0) {
+            mob.attackAnimTimer -= delta;
+            let strike = Math.sin((mob.attackAnimTimer / (mob.type === 'archer' ? 0.5 : 0.3)) * Math.PI) * 1.5;
+            if(mob.type === 'archer') { targetArmRX = -Math.PI/2 - strike*0.5; targetArmLX = -Math.PI/2; } else targetArmRX = strike; 
+        }
+        if (isMoving) {
+            mob.swingTime += delta * 15; let swing = Math.sin(mob.swingTime) * 0.6;
+            targetLegLX = swing; targetLegRX = -swing;
+            if(mob.attackAnimTimer <= 0 && mob.attackTimer > 1.0) targetArmRX = swing;
+            if(mob.attackTimer > 1.0) targetArmLX = -swing;
+        }
+        if (mob.hitFlinch > 0) { mob.hitFlinch -= delta * 3; targetBodyRotX = -0.5 * mob.hitFlinch; }
+        
+        mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
+        mob.armL.rotation.x = THREE.MathUtils.lerp(mob.armL.rotation.x, targetArmLX, 12 * delta);
+        mob.armR.rotation.x = THREE.MathUtils.lerp(mob.armR.rotation.x, targetArmRX, 15 * delta);
+        mob.legL.rotation.x = THREE.MathUtils.lerp(mob.legL.rotation.x, targetLegLX, 15 * delta);
+        mob.legR.rotation.x = THREE.MathUtils.lerp(mob.legR.rotation.x, targetLegRX, 15 * delta);
+        if (this.isHost) mob.mesh.rotation.x = THREE.MathUtils.lerp(mob.mesh.rotation.x, targetBodyRotX, 15 * delta);
     }
 }
