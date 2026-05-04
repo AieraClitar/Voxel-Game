@@ -81,8 +81,6 @@ if (window.io) {
         const group = new THREE.Group();
         const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-        
-        // ✨ THE FIX: Gapless Player Rig to match standard geometry
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); body.castShadow = true;
         const armL = new THREE.Group(); armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
@@ -259,8 +257,10 @@ for(let i=0; i<(isMobile ? 8 : 20); i++) {
 }
 scene.add(cloudGroup);
 
+// ✨ THE FIX: Preview Camera moved up so the Headless Bug is fixed!
 const previewCanvas = document.getElementById('preview-canvas'); const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true }); previewRenderer.setSize(120, 200, false); previewRenderer.setClearColor(0x000000, 0); 
-const previewScene = new THREE.Scene(); const previewCamera = new THREE.PerspectiveCamera(50, 120/200, 0.1, 100); previewCamera.position.set(0, -0.25, 4.0); 
+const previewScene = new THREE.Scene(); const previewCamera = new THREE.PerspectiveCamera(50, 120/200, 0.1, 100); 
+previewCamera.position.set(0, 0.75, 4.0); // Shifted Y from -0.25 to 0.75
 previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight = new THREE.DirectionalLight(0xffffff, 1.5); previewDirLight.position.set(5, 10, 7); previewScene.add(previewDirLight);
 
 const previewPlayer = new THREE.Group();

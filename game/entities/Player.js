@@ -62,7 +62,7 @@ export class Player {
         const matPants = new THREE.MeshLambertMaterial({color: 0x222255}); const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat]; 
         
-        // ✨ THE FIX: Seamless unified skeleton hierarchy
+        // ✨ THE FIX: Gapless unified skeleton matching AI Controller exactly
         this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); this.head.position.set(0, 1.75, 0); 
         this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, 1.125, 0); 
         this.armL = new THREE.Group(); this.armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
@@ -382,6 +382,12 @@ export class Player {
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
 
+                if (type === 'torch') {
+                    this.world.removeBlock(bx, by, bz); 
+                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
+                    break; 
+                }
+
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -404,7 +410,9 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
+                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -459,7 +467,6 @@ export class Player {
         if (this.shakeIntensity > 0) { this.camera.position.x += (Math.random() - 0.5) * this.shakeIntensity * 0.1; this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity * 0.1; this.camera.position.z += (Math.random() - 0.5) * this.shakeIntensity * 0.1; this.shakeIntensity = Math.max(0, this.shakeIntensity - delta * 3); }
         if (this.muzzleFlash.intensity > 0) this.muzzleFlash.intensity = Math.max(0, this.muzzleFlash.intensity - delta * 100);
 
-        // ✨ THE FIX: Anchor the 3D body directly to the feet, not the eyes!
         this.bodyGroup.position.set(this.camera.position.x, this.camera.position.y - 1.5, this.camera.position.z); 
         this._euler.setFromQuaternion(this.camera.quaternion, 'YXZ'); 
         this.bodyGroup.rotation.y = this._euler.y;

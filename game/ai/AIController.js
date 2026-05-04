@@ -54,10 +54,9 @@ export class AIController {
         this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
-        // ✨ THE FIX: Legs are properly sized to 0.75 height to close the gap
+        // ✨ THE FIX: Gapless Rig. 
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); 
         this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.75, 0.25); 
-        
         this.fireParticles = []; this.fireMat = new THREE.MeshBasicMaterial({color: 0xff5500, transparent: true, opacity: 0.8});
     }
 
@@ -69,8 +68,7 @@ export class AIController {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
         
-        // ✨ PERFECT ALIGNMENT: 
-        // Torso is 0.75 tall. Legs are 0.75 tall. Total height = 1.5. Head = 0.5. Overall height = 2.0.
+        // ✨ THE RIG: Total height = 2.0
         const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
         const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
         
@@ -79,12 +77,9 @@ export class AIController {
 
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
-            weaponMesh.position.set(0, -0.75, 0); 
-            weaponMesh.rotation.set(Math.PI / 2, 0, 0); 
-            weaponMesh.castShadow = true; armR.add(weaponMesh);
+            weaponMesh.position.set(0, -0.75, 0); weaponMesh.rotation.set(Math.PI / 2, 0, 0); weaponMesh.castShadow = true; armR.add(weaponMesh);
         }
 
-        // Pivots perfectly at the waist
         const legL = new THREE.Group(); legL.position.set(-0.15, 0.75, 0); const legLMesh = new THREE.Mesh(this.geoLeg, matPants); legLMesh.position.y = -0.375; legLMesh.castShadow = true; legL.add(legLMesh);
         const legR = new THREE.Group(); legR.position.set(0.15, 0.75, 0); const legRMesh = new THREE.Mesh(this.geoLeg, matPants); legRMesh.position.y = -0.375; legRMesh.castShadow = true; legR.add(legRMesh);
 
