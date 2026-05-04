@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { Textures } from '../utils/Textures.js';
 import { AudioSys } from '../utils/AudioSys.js';
+import { create3DWeapon } from './ai/AIController.js';
 
 export class Player {
     constructor(camera, domElement, world) {
@@ -106,6 +107,7 @@ export class Player {
         const flash = document.createElement('div'); flash.style.position = 'absolute'; flash.style.top = '0'; flash.style.left = '0'; flash.style.width = '100%'; flash.style.height = '100%'; flash.style.backgroundColor = 'rgba(255, 0, 0, 0.4)'; flash.style.pointerEvents = 'none'; flash.style.zIndex = '9999'; flash.style.transition = 'opacity 0.2s';
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
+            if (window.showChat) window.showChat(`💀 You were obliterated by a ${source.toUpperCase()}!`);
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
             this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
@@ -298,20 +300,32 @@ export class Player {
         }
 
         const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        
+        // ✨ WIPE OLD WEAPON MESHES
+        const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) this.arm.remove(old1st);
+        const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) this.armR_3rd.remove(old3rd);
+
         if (selected && selected.type !== null && selected.count > 0) {
-            this.heldBlock.visible = true; this.heldBlock_3rd.visible = true; let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
-            if (this.heldBlock.geometry) this.heldBlock.geometry.dispose(); if (this.heldBlock_3rd.geometry) this.heldBlock_3rd.geometry.dispose();
-            if (isTool(selected.type)) {
-                this.heldBlock.geometry = new THREE.PlaneGeometry(0.8, 0.8); this.heldBlock.geometry.translate(0.4, 0.4, 0); this.heldBlock.material = mat; this.heldBlock.position.set(-0.05, 0.3, -0.1); this.heldBlock.rotation.set(0, -Math.PI / 2, 0); 
-                this.heldBlock_3rd.geometry = new THREE.PlaneGeometry(1.0, 1.0); this.heldBlock_3rd.geometry.translate(0.5, 0.5, 0); this.heldBlock_3rd.material = mat; this.heldBlock_3rd.position.set(0, -0.75, -0.15); this.heldBlock_3rd.rotation.set(-Math.PI / 8, -Math.PI / 2, 0); 
-            } else if (selected.type === 'torch') {
-                this.heldBlock.geometry = new THREE.BoxGeometry(0.05, 0.3, 0.05); this.heldBlock.geometry.translate(0, 0.15, 0); this.heldBlock.material = mat; this.heldBlock.position.set(0, 0.3, -0.1); this.heldBlock.rotation.set(Math.PI / 8, 0, 0); 
-                this.heldBlock_3rd.geometry = new THREE.BoxGeometry(0.08, 0.4, 0.08); this.heldBlock_3rd.geometry.translate(0, 0.2, 0); this.heldBlock_3rd.material = mat; this.heldBlock_3rd.position.set(0, -0.75, -0.15); this.heldBlock_3rd.rotation.set(-Math.PI / 8, 0, 0); 
-            } else {
-                this.heldBlock.geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15); this.heldBlock.geometry.translate(0, 0.075, 0); this.heldBlock.material = mat; this.heldBlock.position.set(0, 0.3, -0.1); this.heldBlock.rotation.set(0, Math.PI / 4, 0); 
-                this.heldBlock_3rd.geometry = new THREE.BoxGeometry(0.25, 0.25, 0.25); this.heldBlock_3rd.geometry.translate(0, 0.125, 0); this.heldBlock_3rd.material = mat; this.heldBlock_3rd.position.set(0, -0.75, -0.15); this.heldBlock_3rd.rotation.set(0, Math.PI / 4, 0); 
-            }
-        } else { this.heldBlock.visible = false; this.heldBlock_3rd.visible = false; }
+            this.heldBlock.visible = false; this.heldBlock_3rd.visible = false; 
+            let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
+            let mesh1st, mesh3rd;
+
+            // ✨ USE THE 3D WEAPON FACTORY FOR FIRST/THIRD PERSON!
+            import('./ai/AIController.js').then(module => {
+                if (isTool(selected.type)) {
+                    mesh1st = module.create3DWeapon(selected.type); mesh1st.position.set(0, 0.3, -0.15); mesh1st.rotation.set(-Math.PI/4, 0, 0); 
+                    mesh3rd = module.create3DWeapon(selected.type); mesh3rd.position.set(0, -0.3, 0.15); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
+                } else if (selected.type === 'torch') {
+                    mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.geometry.translate(0, 0.15, 0); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
+                    mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.geometry.translate(0, 0.2, 0); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
+                } else {
+                    mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.geometry.translate(0, 0.075, 0); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
+                    mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.geometry.translate(0, 0.125, 0); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
+                }
+                mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
+                mesh3rd.name = 'equippedItem3rd'; this.armR_3rd.add(mesh3rd);
+            });
+        }
     }
 
     showHotbarName() {
@@ -372,14 +386,6 @@ export class Player {
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
 
-                // ✨ CLIENT PREDICTION: Instant Local Breaking for smooth gameplay!
-                if (type === 'torch') {
-                    this.world.removeBlock(bx, by, bz); 
-                    if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
-                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
-                    break; 
-                }
-
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -402,10 +408,8 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    // ✨ CLIENT PREDICTION: Instant Local Placing for smooth gameplay!
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
-                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -487,7 +491,6 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ CLIENT PREDICTION: Instant Local Break
                         this.world.removeBlock(bx, by, bz); 
                         if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
