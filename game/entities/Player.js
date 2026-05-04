@@ -300,8 +300,23 @@ export class Player {
 
         const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
-        const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) { this.arm.remove(old1st); if(old1st.geometry) old1st.geometry.dispose(); }
-        const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) { this.armR_3rd.remove(old3rd); if(old3rd.geometry) old3rd.geometry.dispose(); }
+        // ✨ THE FIX: Deep dispose function so removing an item doesn't crash the script
+        const clearWeapon = (parent, name) => {
+            const obj = parent.getObjectByName(name);
+            if (obj) {
+                parent.remove(obj);
+                obj.traverse(child => {
+                    if (child.isMesh) {
+                        child.geometry.dispose();
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                });
+            }
+        };
+
+        clearWeapon(this.arm, 'equippedItem1st');
+        clearWeapon(this.armR_3rd, 'equippedItem3rd');
 
         if (selected && selected.type !== null && selected.count > 0) {
             let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
@@ -314,14 +329,8 @@ export class Player {
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                // UI FIX: Pull block down and outwards so it clears the arm geometry visually 
-                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); 
-                mesh1st.position.set(0, -0.3, -0.2); 
-                mesh1st.rotation.set(0, Math.PI / 4, 0); 
-                
-                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
-                mesh3rd.position.set(0, -0.75, -0.15); 
-                mesh3rd.rotation.set(0, Math.PI / 4, 0); 
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
+                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
             }
             mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
             mesh3rd.name = 'equippedItem3rd'; this.armR_3rd.add(mesh3rd);
@@ -387,12 +396,6 @@ export class Player {
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
 
-                if (type === 'torch') {
-                    this.world.removeBlock(bx, by, bz); 
-                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
-                    break; 
-                }
-
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -415,9 +418,7 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
-                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -500,7 +501,6 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        this.world.removeBlock(bx, by, bz); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
