@@ -25,7 +25,6 @@ dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024;
 scene.add(dirLight);
 const handLight = new THREE.PointLight(0xffaa44, 0, 14); scene.add(handLight);
 
-// Wait for Server to provide the deterministic Seed
 let world = new World(scene, 1); 
 const player = new Player(camera, document.body, world);
 const aiController = new AIController(scene, world, player);
@@ -69,7 +68,7 @@ if (window.io) {
             } else if (itemType === 'torch') {
                 mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
+                mesh = new Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
             }
             mesh.name = 'equippedItem'; mesh.castShadow = true; armR.add(mesh);
         }
@@ -117,11 +116,9 @@ if (window.io) {
         });
     });
 
-    // ✨ SERVER SNAPSHOT RECONCILIATION
     window.socket.on('world_snapshot', (data) => {
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         
-        // ✨ FATAL CACHE BUG FIX: Client MUST totally wipe chunkData dictionaries!
         scene.remove(world.dropGroup); scene.remove(world.particleGroup);
         for(const chunk of world.chunks.values()) scene.remove(chunk);
         
@@ -145,11 +142,9 @@ if (window.io) {
         Object.values(data.drops).forEach(d => { world.spawnNetworkedDrop(d.id, d.x, d.y, d.z, d.type); });
         aiController.syncFromServer(data.mobs);
 
-        // Force rebuild with Master Seed
         world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
     });
 
-    // ✨ 20-TPS SERVER TICK ENGINE
     window.socket.on('server_tick', (data) => {
         Object.keys(data.players).forEach(id => {
             if (id === window.socket.id || !networkPlayers.has(id)) return;
@@ -173,10 +168,24 @@ if (window.io) {
     window.socket.on('item_spawned', (data) => { world.spawnNetworkedDrop(data.id, data.x, data.y, data.z, data.type); });
     window.socket.on('item_removed', (dropId) => { world.removeNetworkedDrop(dropId); });
     
-    window.socket.on('playerDamaged', (data) => { if (data.id === window.socket.id) { player.takeDamage(data.dmg, data.source); AudioSys.hurt(); player.shakeIntensity = 0.6; }});
+    // ✨ MULTIPLAYER PLAYER RED FLASH FIX
+    window.socket.on('playerDamaged', (data) => { 
+        if (data.id === window.socket.id) { player.takeDamage(data.dmg, data.source); AudioSys.hurt(); player.shakeIntensity = 0.6; }
+        else if (networkPlayers.has(data.id)) {
+            const p = networkPlayers.get(data.id);
+            p.traverse(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => { if(m.emissive) m.emissive.setHex(0xff0000); }); else if(child.material.emissive) child.material.emissive.setHex(0xff0000); } });
+            setTimeout(() => { if(p) p.traverse(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => { if(m.emissive) m.emissive.setHex(0x000000); }); else if(child.material.emissive) child.material.emissive.setHex(0x000000); } }); }, 200);
+        }
+    });
+    
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type === 'archer' ? 'bow' : 'gun'); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    window.socket.on('mobKilled', (id) => { aiController.killMobLocal(id); });
+    
+    // ✨ MULTIPLAYER KILL CHAT FIX
+    window.socket.on('mobKilled', (data) => { 
+        aiController.killMobLocal(data.mobId); 
+        window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); 
+    });
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
@@ -273,7 +282,7 @@ function animate() {
     world.processChunkQueue();
     const delta = Math.min(clock.getDelta(), 0.1); 
     dayTime = ((Date.now() - localRoomStartTime) / 1000 / 240.0) % 1; world.sunArc = Math.sin(dayTime * Math.PI * 2); let angle = dayTime * Math.PI * 2;
-    document.getElementById('time-indicator').style.left = `${dayTime * 100}%`; document.getElementById('time-indicator').innerText = (dayTime > 0.5 && dayTime < 1.0) ? '🌙' : '☀️';
+    document.getElementById('time-indicator').style.left = `${dayTime * 100}%`; document.getElementById('time-indicatorinnerText') = (dayTime > 0.5 && dayTime < 1.0) ? '🌙' : '☀️';
 
     let hasRoof = false; let roofType = 'air';
     const bx = Math.round(player.camera.position.x); const bz = Math.round(player.camera.position.z); const by = Math.round(player.camera.position.y + 1.0); 

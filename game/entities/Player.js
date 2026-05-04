@@ -106,7 +106,6 @@ export class Player {
         const flash = document.createElement('div'); flash.style.position = 'absolute'; flash.style.top = '0'; flash.style.left = '0'; flash.style.width = '100%'; flash.style.height = '100%'; flash.style.backgroundColor = 'rgba(255, 0, 0, 0.4)'; flash.style.pointerEvents = 'none'; flash.style.zIndex = '9999'; flash.style.transition = 'opacity 0.2s';
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
-            if (window.showChat) window.showChat(`💀 Player was obliterated by a ${source.toUpperCase()}!`);
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
             this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
@@ -361,8 +360,6 @@ export class Player {
                     if (tool === 'gun') dmg = 50; if (tool === 'bow') dmg = 25; if (tool === 'crossbow') dmg = 35;       
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
-                    
-                    // ✨ SERVER AUTHORITY: Attack intent sent. The server manages health.
                     if (window.socket) { window.socket.emit('requestMobAttack', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
                     this.shakeIntensity = 0.3; 
                 }
@@ -374,6 +371,14 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
+
+                // ✨ CLIENT PREDICTION: Instant Local Breaking for smooth gameplay!
+                if (type === 'torch') {
+                    this.world.removeBlock(bx, by, bz); 
+                    if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
+                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
+                    break; 
+                }
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
@@ -397,8 +402,10 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    // ✨ SERVER AUTHORITY: Intent to place.
+                    // ✨ CLIENT PREDICTION: Instant Local Placing for smooth gameplay!
+                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -444,10 +451,8 @@ export class Player {
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
-                // ✨ ANTI-DUPE: Ensure Server responds to intent before inventory increases
                 if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; 
-                    drop.mesh.visible = false; 
+                    drop.isBeingPickedUp = true; drop.mesh.visible = false; 
                     window.socket.emit('requestPickup', drop.id);
                 }
             }
@@ -482,7 +487,9 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ SERVER AUTHORITY: Emits intention, does NOT remove locally until server confirms.
+                        // ✨ CLIENT PREDICTION: Instant Local Break
+                        this.world.removeBlock(bx, by, bz); 
+                        if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
@@ -504,7 +511,7 @@ export class Player {
                 window.socket.emit('move', {
                     x: this.camera.position.x, y: this.camera.position.y - 1.5, z: this.camera.position.z,
                     ry: this._euler.y, rx: this._euler.x, heldItem: this.inventory[this.selectedSlot]?.type || null,
-                    isAttacking: this.attackAnimTimer > 0
+                    isAttacking: this.attackAnimTimer > 0, health: this.health
                 });
                 this.lastNetUpdate = performance.now();
             }
