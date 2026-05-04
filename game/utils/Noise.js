@@ -1,18 +1,29 @@
 export class SimpleNoise {
-    constructor(seed = 1) { this.seed = seed; }
+    constructor(seed = 1) {
+        this.seed = seed;
+    }
 
     random(x, z) {
-        let n = x * 331 + z * 337 + this.seed;
-        n = (n << 13) ^ n;
-        return (1.0 - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0);
+        // ✨ THE FIX: Deterministic sine wave hash. NO BITWISE MATH.
+        const sin = Math.sin(Math.floor(x) * 12.9898 + Math.floor(z) * 78.233 + this.seed) * 43758.5453;
+        return sin - Math.floor(sin);
     }
 
     getNoise(x, z) {
         const intX = Math.floor(x); const intZ = Math.floor(z);
         const fractX = x - intX; const fractZ = z - intZ;
-        const v1 = this.random(intX, intZ); const v2 = this.random(intX + 1, intZ);
-        const v3 = this.random(intX, intZ + 1); const v4 = this.random(intX + 1, intZ + 1);
-        const i1 = v1 * (1 - fractX) + v2 * fractX; const i2 = v3 * (1 - fractX) + v4 * fractX;
-        return i1 * (1 - fractZ) + i2 * fractZ;
+
+        const v1 = this.random(intX, intZ);
+        const v2 = this.random(intX + 1, intZ);
+        const v3 = this.random(intX, intZ + 1);
+        const v4 = this.random(intX + 1, intZ + 1);
+
+        const fX = (1 - Math.cos(fractX * Math.PI)) * 0.5;
+        const fZ = (1 - Math.cos(fractZ * Math.PI)) * 0.5;
+
+        const i1 = v1 * (1 - fX) + v2 * fX;
+        const i2 = v3 * (1 - fX) + v4 * fX;
+
+        return (i1 * (1 - fZ) + i2 * fZ) * 2.0 - 1.0; 
     }
 }
