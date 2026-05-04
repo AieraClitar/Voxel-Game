@@ -96,6 +96,7 @@ if (window.io) {
         return group;
     }
 
+    // ✨ UI FIX: Enhanced Lobby Browser to show World Names
     window.socket.on('lobbyUpdate', (activeWorlds) => {
         const serverList = document.getElementById('server-list'); if(!serverList) return;
         serverList.innerHTML = '';
@@ -103,23 +104,34 @@ if (window.io) {
 
         activeWorlds.forEach(serverInfo => {
             const div = document.createElement('div'); div.className = 'server-item';
-            const info = document.createElement('span'); info.innerText = `🌍 ${serverInfo.hostName}'s World (${serverInfo.playerCount} player${serverInfo.playerCount !== 1 ? 's' : ''})`;
-            const joinBtn = document.createElement('button'); joinBtn.innerText = 'Join'; joinBtn.className = 'mc-btn';
+            const info = document.createElement('span'); 
+            info.innerText = `🌍 ${serverInfo.worldName} (Host: ${serverInfo.hostName}) - ${serverInfo.playerCount} player(s)`;
             
-            joinBtn.onclick = () => {
+            const joinBtn = document.createElement('button'); joinBtn.innerText = 'Join'; joinBtn.className = 'mc-btn';
+            joinBtn.onclick = (e) => {
+                e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
                 localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
                 window.socket.emit('joinGame', { roomId: serverInfo.id, playerName: localPlayerName });
                 AudioSys.init(); 
-                document.getElementById('lobby-browser').style.display = 'none'; document.getElementById('main-menu').style.display = 'none';
-                document.getElementById('loading-screen').style.display = 'flex';
-                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-                player.gameActive = true; 
             };
             div.appendChild(info); div.appendChild(joinBtn); serverList.appendChild(div);
         });
     });
 
+    // ✨ UI FIX: Handle invalid connections so players don't get stuck
+    window.socket.on('joinError', (msg) => {
+        alert(msg);
+        location.reload();
+    });
+
+    // ✨ UI FIX: Only start loading AFTER the server confirms connection and sends data
     window.socket.on('world_snapshot', (data) => {
+        document.getElementById('lobby-browser').style.display = 'none'; 
+        document.getElementById('world-menu').style.display = 'none'; 
+        document.getElementById('main-menu').style.display = 'none';
+        document.getElementById('loading-screen').style.display = 'flex';
+        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         
         scene.remove(world.dropGroup); scene.remove(world.particleGroup);
@@ -194,16 +206,14 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); });
-    
-    // ✨ FIX: Separated the Despawn Logic entirely so it doesn't trigger the Kill feed.
+    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(data.killerName); });
     window.socket.on('mobDespawned', (mobId) => { aiController.killMobLocal(mobId); });
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
-    window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
+    window.socket.on('hostLeft', () => { alert("The Host has left the world. The connection was closed."); location.reload(); });
     window.socket.on('blockUpdate', (data) => { 
         const dist = player.camera.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z));
         if(data.action === 'add') { 
@@ -218,16 +228,28 @@ if (window.io) {
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
+// ✨ UI FIX: Wiring up the Host World -> Naming Menu Flow
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
 const closeLobbyBtn = document.getElementById('close-lobby');
 if(closeLobbyBtn) closeLobbyBtn.addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'none'; });
 
 document.getElementById('btn-play-menu').addEventListener('click', () => {
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('world-menu').style.display = 'flex';
+});
+
+document.getElementById('btn-back-menu').addEventListener('click', () => {
+    document.getElementById('world-menu').style.display = 'none';
+    document.getElementById('main-menu').style.display = 'flex';
+});
+
+document.getElementById('btn-create-world').addEventListener('click', (e) => {
+    e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
     localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
-    if (window.socket) window.socket.emit('createGame', localPlayerName);
-    AudioSys.init(); document.getElementById('main-menu').style.display = 'none'; document.getElementById('loading-screen').style.display = 'flex';
-    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-    player.gameActive = true; 
+    const worldName = document.getElementById('world-name-input').value.trim() || "New World";
+    
+    if (window.socket) window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName });
+    AudioSys.init(); 
 });
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); if(playerListUI) playerListUI.style.display = 'block'; }});
