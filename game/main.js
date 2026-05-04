@@ -96,7 +96,6 @@ if (window.io) {
         return group;
     }
 
-    // ✨ UI FIX: Enhanced Lobby Browser to show World Names
     window.socket.on('lobbyUpdate', (activeWorlds) => {
         const serverList = document.getElementById('server-list'); if(!serverList) return;
         serverList.innerHTML = '';
@@ -118,15 +117,44 @@ if (window.io) {
         });
     });
 
-    // ✨ UI FIX: Handle invalid connections so players don't get stuck
-    window.socket.on('joinError', (msg) => {
-        alert(msg);
-        location.reload();
+    // ✨ LOAD SAVED WORLDS BROWSER
+    window.socket.on('savedWorldsList', (savedWorldsArray) => {
+        const savedList = document.getElementById('saved-list'); if(!savedList) return;
+        savedList.innerHTML = '';
+        if(savedWorldsArray.length === 0) { savedList.innerHTML = '<div style="color: #aaa; text-align: center; padding: 10px;">No saved worlds found. Create one!</div>'; return; }
+
+        savedWorldsArray.forEach(worldName => {
+            const div = document.createElement('div'); div.className = 'server-item';
+            const info = document.createElement('span'); info.innerText = `💾 ${worldName}`;
+            
+            const hostBtn = document.createElement('button'); hostBtn.innerText = 'Host World'; hostBtn.className = 'mc-btn';
+            hostBtn.onclick = (e) => {
+                e.target.innerText = "Starting..."; e.target.classList.add('disabled');
+                localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
+                window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName });
+                AudioSys.init(); 
+            };
+            div.appendChild(info); div.appendChild(hostBtn); savedList.appendChild(div);
+        });
     });
 
-    // ✨ UI FIX: Only start loading AFTER the server confirms connection and sends data
+    window.socket.on('joinError', (msg) => { alert(msg); location.reload(); });
+
+    // ✨ RESTORES SAVED PLAYER INVENTORY AND POSITION
+    window.socket.on('restore_player_data', (data) => {
+        player.camera.position.set(data.x, data.y, data.z);
+        player.health = data.health;
+        if (data.inventory) {
+            player.inventory = data.inventory.hotbar;
+            player.mainInventory = data.inventory.main;
+            player.updateInventoryUI();
+        }
+        window.showChat(`Welcome back, ${localPlayerName}! State restored.`);
+    });
+
     window.socket.on('world_snapshot', (data) => {
         document.getElementById('lobby-browser').style.display = 'none'; 
+        document.getElementById('saved-browser').style.display = 'none'; 
         document.getElementById('world-menu').style.display = 'none'; 
         document.getElementById('main-menu').style.display = 'none';
         document.getElementById('loading-screen').style.display = 'flex';
@@ -228,10 +256,18 @@ if (window.io) {
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
-// ✨ UI FIX: Wiring up the Host World -> Naming Menu Flow
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
 const closeLobbyBtn = document.getElementById('close-lobby');
 if(closeLobbyBtn) closeLobbyBtn.addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'none'; });
+
+// ✨ SAVED WORLDS UI HANDLERS
+document.getElementById('btn-load-saved').addEventListener('click', () => { 
+    if (window.socket) window.socket.emit('requestSavedWorlds');
+    document.getElementById('saved-browser').style.display = 'block'; 
+});
+const closeSavedBtn = document.getElementById('close-saved');
+if(closeSavedBtn) closeSavedBtn.addEventListener('click', () => { document.getElementById('saved-browser').style.display = 'none'; });
+
 
 document.getElementById('btn-play-menu').addEventListener('click', () => {
     document.getElementById('main-menu').style.display = 'none';
@@ -250,6 +286,22 @@ document.getElementById('btn-create-world').addEventListener('click', (e) => {
     
     if (window.socket) window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName });
     AudioSys.init(); 
+});
+
+// ✨ SAVE & EXIT HANDLER
+document.getElementById('btn-save-exit').addEventListener('click', () => {
+    if (window.socket && player.gameActive) {
+        document.getElementById('save-notif').style.display = 'block';
+        window.socket.emit('saveAndExit', {
+            playerName: localPlayerName,
+            inventory: { hotbar: player.inventory, main: player.mainInventory },
+            x: player.camera.position.x,
+            y: player.camera.position.y,
+            z: player.camera.position.z,
+            health: player.health
+        });
+        setTimeout(() => location.reload(), 800); // Give it a moment to send data, then disconnect natively
+    }
 });
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); if(playerListUI) playerListUI.style.display = 'block'; }});
@@ -317,7 +369,11 @@ function animate() {
         document.getElementById('loading-progress').style.width = `${(initialChunksDone / initialChunksNeeded) * 100}%`;
         if (world.chunkQueue.length === 0) {
             isGeneratingWorld = false; let spawnY = world.getSurfaceHeight(16, 16) + 2;
-            player.camera.position.set(16, spawnY, 16); player.velocity.set(0,0,0);
+            // NOTE: If restore_player_data already set the position, it will override this
+            if (player.velocity.x === 0 && player.velocity.z === 0) {
+                player.camera.position.set(16, spawnY, 16);
+            }
+            player.velocity.set(0,0,0);
             document.getElementById('loading-screen').style.display = 'none'; document.getElementById('hud-layer').style.display = 'block';
             player.gameActive = true; if (!isMobile) player.controls.lock();
         }
