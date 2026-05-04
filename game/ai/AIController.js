@@ -6,7 +6,6 @@ export class AIController {
     constructor(scene, world, player) {
         this.scene = scene; this.world = world; this.player = player;
         this.mobs = new Map(); 
-        this.projectiles = [];
         
         this.meleeTools = ['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick'];
         this.rangedTools = ['bow', 'crossbow', 'gun'];
@@ -19,7 +18,7 @@ export class AIController {
     }
 
     // ✨ ALL SPAWNING AND DELETION DICTATED BY SERVER
-    spawnMob(id, type, x, y, z) {
+    spawnMob(id, type, x, y, z, weaponType) {
         if (this.mobs.has(id)) return;
         const mobGroup = new THREE.Group(); const isZombie = type === 'zombie';
         const matSkin = isZombie ? this.matZombieSkin.clone() : this.matArcherSkin.clone(); const matShirt = isZombie ? this.matZombieShirt.clone() : this.matArcherShirt.clone(); const matPants = isZombie ? this.matZombiePants.clone() : this.matArcherPants.clone();
@@ -31,7 +30,6 @@ export class AIController {
         const armL = new THREE.Group(); armL.position.set(-0.425, -0.25, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
         const armR = new THREE.Group(); armR.position.set(0.425, -0.25, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
-        let weaponType = isZombie ? this.meleeTools[Math.floor(Math.random() * this.meleeTools.length)] : this.rangedTools[Math.floor(Math.random() * this.rangedTools.length)];
         const weaponMat = this.world.itemMaterials[weaponType] || this.world.itemMaterials['stone'];
         const weaponMesh = new THREE.Mesh(this.geoWeapon, weaponMat);
         weaponMesh.position.set(0, -0.75, -0.15); weaponMesh.rotation.set(-Math.PI / 8, -Math.PI / 2, 0); weaponMesh.castShadow = true; armR.add(weaponMesh);
@@ -43,7 +41,7 @@ export class AIController {
         mobGroup.position.set(x, y, z); this.scene.add(mobGroup);
 
         const mobObj = {
-            id: id, type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head, weaponType: weaponType,
+            id: id, type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head,
             swingTime: 0, attackAnimTimer: 0, hitFlinch: 0, targetPos: new THREE.Vector3(x, y, z), targetRy: 0, isMoving: false 
         };
 
@@ -66,18 +64,60 @@ export class AIController {
         this.mobs.delete(id);
     }
 
+    shootProjectile(fromPos, toPos, type) {
+        const isGun = type === 'gun';
+        const speed = isGun ? 60 : 30;
+        const mesh = new THREE.Mesh(isGun ? this.geoBullet : this.geoArrow, isGun ? this.matBullet : this.matArrow);
+        mesh.position.set(fromPos.x, fromPos.y - 0.2, fromPos.z); 
+        this.scene.add(mesh);
+        
+        let distToPlayer = fromPos.distanceTo(this.player.camera.position);
+        isGun ? AudioSys.shootGun(distToPlayer) : AudioSys.shootBow(distToPlayer);
+        
+        const dir = new THREE.Vector3().subVectors(toPos, mesh.position);
+        const distance = dir.length(); dir.normalize();
+        const timeToTarget = distance / speed;
+        const dropCompensation = 0.5 * 15.0 * (timeToTarget * timeToTarget);
+        
+        const targetPos = toPos.clone(); targetPos.y += dropCompensation;
+        const trueVel = new THREE.Vector3().subVectors(targetPos, mesh.position).normalize().multiplyScalar(speed);
+        mesh.lookAt(targetPos);
+        
+        // Add to scene but manage its trajectory here
+        const projInterval = setInterval(() => {
+            if(!this.player.gameActive) return;
+            mesh.position.addScaledVector(trueVel, 0.05);
+            trueVel.y -= 15.0 * 0.05;
+            mesh.lookAt(mesh.position.clone().add(trueVel));
+
+            let dx = mesh.position.x - this.player.camera.position.x; let dz = mesh.position.z - this.player.camera.position.z; let dy = mesh.position.y - this.player.camera.position.y;
+            if (Math.sqrt(dx*dx + dz*dz) < 0.6 && dy < 0.2 && dy > -1.6) {
+                 if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: isGun ? 35 : 15, source: isGun ? 'Gunshot' : 'Arrow' });
+                 this.scene.remove(mesh); clearInterval(projInterval);
+            } else if (this.world.getBlockType(Math.round(mesh.position.x), Math.round(mesh.position.y), Math.round(mesh.position.z)) !== 'air') {
+                 this.scene.remove(mesh); clearInterval(projInterval);
+            }
+        }, 50);
+        setTimeout(() => { clearInterval(projInterval); this.scene.remove(mesh); }, 3000);
+    }
+
     syncFromServer(serverMobs) {
-        // Create new mobs and update targets
+        if (!serverMobs) return;
+        const currentIds = new Set(Object.keys(serverMobs));
+        
+        for (let id of this.mobs.keys()) {
+            if (!currentIds.has(id)) this.killMobLocal(id);
+        }
+
         for (let id in serverMobs) {
             const sm = serverMobs[id];
-            if (!this.mobs.has(id)) this.spawnMob(id, sm.type, sm.x, sm.y, sm.z);
+            if (!this.mobs.has(id)) this.spawnMob(id, sm.type, sm.x, sm.y, sm.z, sm.weapon);
+            
             const mob = this.mobs.get(id);
             mob.targetPos.set(sm.x, sm.y, sm.z);
-            mob.targetRy = sm.ry; mob.isMoving = sm.isMoving;
-        }
-        // Remove mobs not sent by server
-        for (let id of this.mobs.keys()) {
-            if (!serverMobs[id]) this.killMobLocal(id);
+            mob.targetRy = sm.ry; 
+            mob.isMoving = sm.isMoving;
+            if (sm.isAttacking && mob.attackAnimTimer <= 0) mob.attackAnimTimer = 0.5;
         }
     }
 
@@ -94,6 +134,13 @@ export class AIController {
                 targetLegLX = swing; targetLegRX = -swing; targetArmRX = swing; targetArmLX = -swing;
             }
             if (mob.hitFlinch > 0) { mob.hitFlinch -= delta * 3; targetBodyRotX = -0.5 * mob.hitFlinch; }
+
+            if (mob.type === 'archer' && mob.isMoving === false && mob.attackAnimTimer <= 0) { targetArmRX = -Math.PI / 2; targetArmLX = -Math.PI / 2; }
+            if (mob.attackAnimTimer > 0) {
+                mob.attackAnimTimer -= delta;
+                let strike = Math.sin((mob.attackAnimTimer / (mob.type === 'archer' ? 0.5 : 0.3)) * Math.PI) * 1.5;
+                if(mob.type === 'archer') { targetArmRX = -Math.PI/2 - strike*0.5; targetArmLX = -Math.PI/2; } else targetArmRX = strike; 
+            }
             
             mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
             mob.armL.rotation.x = THREE.MathUtils.lerp(mob.armL.rotation.x, targetArmLX, 12 * delta);

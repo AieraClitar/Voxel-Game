@@ -94,7 +94,7 @@ export class Player {
         const item = this.inventory[this.selectedSlot];
         if (item && item.count > 0) {
             const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5)); 
-            if(window.socket) window.socket.emit('requestDropItem', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: item.type }); // ✨ INTENT
+            if(window.socket) window.socket.emit('requestDropItem', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: item.type }); 
             item.count--; if (item.count <= 0) item.type = null;
             this.updateInventoryUI(); if (AudioSys && AudioSys.playNoise) AudioSys.playNoise(0.1, 0.1, 400); 
         }
@@ -109,6 +109,7 @@ export class Player {
             if (window.showChat) window.showChat(`💀 Player was obliterated by a ${source.toUpperCase()}!`);
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
             this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
+            if (window.socket) window.socket.emit('playerRespawn'); // Reset health on server
         }
     }
 
@@ -361,7 +362,7 @@ export class Player {
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
                     
-                    // ✨ SERVER AUTHORITY: Attack intent sent
+                    // ✨ SERVER AUTHORITY: Attack intent sent. The server maintains health.
                     if (window.socket) { window.socket.emit('requestMobAttack', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
                     this.shakeIntensity = 0.3; 
                 }
@@ -373,6 +374,13 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
+
+                // Force torch breaks through server validation
+                if (type === 'torch') {
+                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
+                    if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(); 
+                    break;
+                }
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
@@ -481,7 +489,7 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ SERVER AUTHORITY: Emits intention, does NOT remove locally until server confirms.
+                        // ✨ SERVER AUTHORITY: Emits intention. Local state is unaltered until server replies.
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }
@@ -503,7 +511,7 @@ export class Player {
                 window.socket.emit('move', {
                     x: this.camera.position.x, y: this.camera.position.y - 1.5, z: this.camera.position.z,
                     ry: this._euler.y, rx: this._euler.x, heldItem: this.inventory[this.selectedSlot]?.type || null,
-                    isAttacking: this.attackAnimTimer > 0, health: this.health
+                    isAttacking: this.attackAnimTimer > 0 // Do not emit health, Server owns Health!
                 });
                 this.lastNetUpdate = performance.now();
             }

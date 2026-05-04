@@ -11,7 +11,7 @@ const BLOCK_TYPES = {
 const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
 export class World {
-    // ✨ DETERMINISTIC SEED: Passed directly from Server Snapshot
+    // ✨ DETERMINISTIC SEED
     constructor(scene, seed = 42) {
         this.scene = scene;
         this.heightMap = new SimpleNoise(seed); this.roughMap = new SimpleNoise(seed + 1337); this.tempMap = new SimpleNoise(seed + 555); this.humidMap = new SimpleNoise(seed + 999); this.treeMap = new SimpleNoise(seed + 888); 
@@ -54,19 +54,23 @@ export class World {
     hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water'; }
     setBlockData(x, y, z, typeId) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const cKey = this.getChunkKey(cx, cz); let data = this.chunkData.get(cKey); if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); } const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx !== -1) data[idx] = typeId; }
 
-    addBlock(x, y, z, typeStr, normal = null) {
-        const typeId = BLOCK_TYPES[typeStr]; if (this.getBlockType(x, y, z) !== 'air') return;
+    // ✨ RECONCILIATION: Added FORCE bypass for Server Commands
+    addBlock(x, y, z, typeStr, normal = null, force = false) {
+        const typeId = BLOCK_TYPES[typeStr]; 
+        if (!force && this.getBlockType(x, y, z) !== 'air') return;
         this.setBlockData(x, y, z, typeId);
         if (typeStr === 'torch') { const key = `${x},${y},${z}`; if (normal) this.torchNormals.set(key, normal); this.addTorchLight(x, y, z); }
         this.triggerMeshRebuild(x, y, z);
     }
 
-    removeBlock(x, y, z, skipParticles = false) {
-        const type = this.getBlockType(x, y, z); if (type === 'air') return;
+    // ✨ RECONCILIATION: Added FORCE bypass for Server Commands
+    removeBlock(x, y, z, skipParticles = false, force = false) {
+        const type = this.getBlockType(x, y, z); 
+        if (!force && type === 'air') return;
         this.setBlockData(x, y, z, 0); const key = `${x},${y},${z}`;
         if (type === 'torch' && this.lightSources.has(key)) { this.scene.remove(this.lightSources.get(key)); this.lightSources.delete(key); this.torchNormals.delete(key); }
         this.checkAndBreakAttachedTorches(x, y, z); this.triggerMeshRebuild(x, y, z);
-        if(!skipParticles) this.spawnParticles(x, y, z, type); 
+        if(!skipParticles && type !== 'air') this.spawnParticles(x, y, z, type); 
     }
 
     spawnParticles(x, y, z, type, isBlood = false) {
@@ -94,7 +98,6 @@ export class World {
                 const normal = this.torchNormals.get(`${tx},${ty},${tz}`); let attached = false;
                 if (off.f === 'y' && (!normal || normal.y === 1)) attached = true; if (off.f === 'x1' && normal && normal.x === 1) attached = true; if (off.f === 'x-1' && normal && normal.x === -1) attached = true; if (off.f === 'z1' && normal && normal.z === 1) attached = true; if (off.f === 'z-1' && normal && normal.z === -1) attached = true;
                 
-                // ✨ AUTHORITY SYNC: Relays cascade break intent to server
                 if (attached) { 
                     if(window.socket) window.socket.emit('requestBlockBreak', {x:tx, y:ty, z:tz, type:'torch'}); 
                 }
@@ -130,7 +133,6 @@ export class World {
                 }
 
                 if (this.getBlockType(wx, height, wz) !== 'air') {
-                    // ✨ DETERMINISTIC SEED RENDERING: Replaced Math.random() with strict map noise!
                     let localTreeRand = Math.abs(this.treeMap.random(wx, wz)); 
                     let localCactusRand = Math.abs(this.roughMap.random(wx, wz));
 
@@ -152,7 +154,7 @@ export class World {
             }
         });
 
-        // ✨ RECONCILIATION: Overwrites any procedural generation with the Server Truth Map
+        // ✨ SERVER TRUTH OVERRIDE
         if (this.serverBlocks) {
             for (let [key, typeStr] of this.serverBlocks.entries()) {
                 const [bx, by, bz] = key.split(',').map(Number);

@@ -158,19 +158,6 @@ if (window.io) {
         aiController.syncFromServer(data.mobs);
     });
 
-    // ✨ PERIODIC HARD SYNC (Prevents missed packets)
-    window.socket.on('hard_sync', (data) => {
-        if(!data.blocks) return;
-        Object.keys(data.blocks).forEach(key => {
-            const [bx, by, bz] = key.split(',').map(Number);
-            if (world.serverBlocks.get(key) !== data.blocks[key]) {
-                world.serverBlocks.set(key, data.blocks[key]);
-                if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
-                else world.addBlock(bx, by, bz, data.blocks[key]);
-            }
-        });
-    });
-
     window.socket.on('newPlayer', (data) => {
         window.showChat(`🌍 ${data.player.name || "Guest"} joined the world!`);
         const mesh = createNetworkPlayer(data.player.name || "Guest");
@@ -183,8 +170,10 @@ if (window.io) {
     window.socket.on('item_spawned', (data) => { world.spawnNetworkedDrop(data.id, data.x, data.y, data.z, data.type); });
     window.socket.on('item_removed', (dropId) => { world.removeNetworkedDrop(dropId); });
     
+    // Server Authority Damage routing
+    window.socket.on('playerDamaged', (data) => { if (data.id === window.socket.id) { player.takeDamage(data.dmg, data.source); AudioSys.hurt(); player.shakeIntensity = 0.6; }});
+    window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type === 'archer' ? 'bow' : 'gun'); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    window.socket.on('mobSpawned', (data) => { aiController.spawnMob(data.id, data.type, data.x, data.y, data.z); });
     window.socket.on('mobKilled', (id) => { aiController.killMobLocal(id); });
 
     window.socket.on('playerDisconnected', (id) => {
@@ -192,7 +181,7 @@ if (window.io) {
     });
 
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
-    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); world.networkAddBlock(data.x, data.y, data.z, data.type); } else { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); world.networkRemoveBlock(data.x, data.y, data.z, true); } });
+    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); world.addBlock(data.x, data.y, data.z, data.type, null, true); } else { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); world.removeBlock(data.x, data.y, data.z, false, true); } });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
