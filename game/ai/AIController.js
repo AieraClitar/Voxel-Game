@@ -54,7 +54,6 @@ export class AIController {
         this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
-        // ✨ THE FIX: Gapless unified skeleton matching exact dimensions
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); 
         this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); 
         this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); 
@@ -71,7 +70,6 @@ export class AIController {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
         
-        // Body segments stack properly: Leg (0.75) -> Torso (0.75) -> Head (0.5) = 2.0 total height.
         const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
         const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
         
@@ -81,7 +79,6 @@ export class AIController {
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
             weaponMesh.position.set(0, -0.75, 0); 
-            // Rotation properly aligns tools forward
             if (weaponType.includes('sword') || weaponType.includes('axe') || weaponType.includes('pickaxe')) {
                 weaponMesh.rotation.set(Math.PI, -Math.PI / 2, 0);
             } else {
@@ -157,7 +154,9 @@ export class AIController {
             projGroup.position.addScaledVector(trueVel, 0.05); trueVel.y -= 15.0 * 0.05; projGroup.lookAt(projGroup.position.clone().add(trueVel));
 
             let dx = projGroup.position.x - this.player.camera.position.x; let dz = projGroup.position.z - this.player.camera.position.z; let dy = projGroup.position.y - this.player.camera.position.y;
-            if (Math.sqrt(dx*dx + dz*dz) < 0.6 && dy < 0.2 && dy > -1.6) {
+            
+            // ✨ THE FIX: Massive collision radius specifically designed to catch arrows flying past you between frames.
+            if (Math.sqrt(dx*dx + dz*dz) < 1.8 && dy < 1.8 && dy > -2.0) {
                  if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: type==='gun'?35:type==='crossbow'?25:15, source: type });
                  this.scene.remove(projGroup); clearInterval(projInterval);
             } else if (this.world.getBlockType(Math.round(projGroup.position.x), Math.round(projGroup.position.y), Math.round(projGroup.position.z)) !== 'air') {
@@ -205,8 +204,9 @@ export class AIController {
                 if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.1; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; 
             }
             
-            if (mob.isBurning && Math.random() < 0.2) {
-                const f = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,0.15), this.fireMat);
+            // ✨ THE FIX: We make the fire effect slightly larger and guarantee it spawns.
+            if (mob.isBurning && Math.random() < 0.4) {
+                const f = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), this.fireMat);
                 f.position.set(mob.mesh.position.x + (Math.random()-0.5)*0.6, mob.mesh.position.y + 0.5 + Math.random()*1.5, mob.mesh.position.z + (Math.random()-0.5)*0.6);
                 this.scene.add(f); this.fireParticles.push({mesh: f, life: 1.0});
             }
