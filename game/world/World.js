@@ -38,7 +38,6 @@ export class World {
             14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') })
         };
 
-        // ✨ THE FIX: Explicitly added `snow` and `ice` to the items dictionary so they have UI icons
         this.itemMaterials = {
             stone: this.materials[2], dirt: this.materials[3], grass: this.materials[4], sand: this.materials[5], snow: this.materials[6], ice: this.materials[7], oak_wood: this.materials[9], birch_wood: this.materials[10], leaves: this.materials[11], oak_planks: this.materials[12], birch_planks: this.materials[16], crafting_table: this.materials[13], cactus: this.materials[14], torch: this.materials[15],
             stick: toolMat('stick'), wooden_sword: toolMat('wooden_sword'), stone_sword: toolMat('stone_sword'), wooden_pickaxe: toolMat('wooden_pickaxe'), stone_pickaxe: toolMat('stone_pickaxe'), wooden_axe: toolMat('wooden_axe'), stone_axe: toolMat('stone_axe'), wooden_shovel: toolMat('wooden_shovel'), stone_shovel: toolMat('stone_shovel'), bow: toolMat('bow'), crossbow: toolMat('crossbow'), gun: toolMat('gun')
@@ -118,10 +117,22 @@ export class World {
                     let typeId = 2; let isCave = false;
                     if (y === -30) typeId = 1; 
                     else if (y <= height) { let n1 = this.roughMap.getNoise(wx * 0.04, y * 0.04 + wz * 0.01); let n2 = this.humidMap.getNoise(wz * 0.04, y * 0.04 + wx * 0.01); if (Math.abs(n1) < 0.12 && Math.abs(n2) < 0.12) isCave = true; }
+                    
                     if (!isCave) {
-                        if (y > height && y <= WATER_LEVEL) typeId = biome === 'tundra' ? 7 : 8; 
-                        else if (y === height) { if (biome === 'desert') typeId = 5; else if (biome === 'tundra') typeId = 6; else typeId = height <= WATER_LEVEL + 1 ? 5 : 4; } 
+                        // ✨ THE FIX: Tundra lakes are filled with WATER (8), with ICE (7) only on the top block!
+                        if (y > height && y <= WATER_LEVEL) {
+                            typeId = (biome === 'tundra' && y === WATER_LEVEL) ? 7 : 8; 
+                        } 
+                        // ✨ THE FIX: The bottom of lakes are Dirt (3), not Snow.
+                        else if (y === height) { 
+                            if (height < WATER_LEVEL) {
+                                typeId = 3; 
+                            } else {
+                                if (biome === 'desert') typeId = 5; else if (biome === 'tundra') typeId = 6; else typeId = height <= WATER_LEVEL + 1 ? 5 : 4; 
+                            }
+                        } 
                         else if (y > height - 3 && y !== -30) typeId = biome === 'desert' ? 5 : 3; 
+                        
                         const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); if (data[idx] === 0) data[idx] = typeId;
                     }
                 }
@@ -170,7 +181,9 @@ export class World {
         const chunkGroup = new THREE.Group(); chunkGroup.userData.isChunk = true;
         const instances = {}; for(let i = 1; i <= 16; i++) instances[i] = []; 
         const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE; const matrix = new THREE.Matrix4();
-        const isSolid = (id) => id > 0 && id !== 8 && id !== 11 && id !== 14 && id !== 15;
+        
+        // ✨ THE FIX: Ice (7) is added here so blocks below it don't turn invisible to create the void bug
+        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15;
 
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
