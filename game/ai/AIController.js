@@ -54,8 +54,12 @@ export class AIController {
         this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
-        this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); 
-        this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.75, 0.25); 
+        // ✨ THE FIX: Gapless unified skeleton matching exact dimensions
+        this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); 
+        this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); 
+        this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); 
+        this.geoLeg = new THREE.BoxGeometry(0.25, 0.75, 0.25); 
+        
         this.fireParticles = []; this.fireMat = new THREE.MeshBasicMaterial({color: 0xff5500, transparent: true, opacity: 0.8});
     }
 
@@ -67,6 +71,7 @@ export class AIController {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
         
+        // Body segments stack properly: Leg (0.75) -> Torso (0.75) -> Head (0.5) = 2.0 total height.
         const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
         const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
         
@@ -76,7 +81,7 @@ export class AIController {
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
             weaponMesh.position.set(0, -0.75, 0); 
-            // ✨ FIX: Proper tool rotation for zombies so swords point forward
+            // Rotation properly aligns tools forward
             if (weaponType.includes('sword') || weaponType.includes('axe') || weaponType.includes('pickaxe')) {
                 weaponMesh.rotation.set(Math.PI, -Math.PI / 2, 0);
             } else {

@@ -298,18 +298,21 @@ export class Player {
             if (this.draggedItem.type !== null && this.draggedItem.count > 0) { dragEl.style.display = 'block'; if (this.uiIcons[this.draggedItem.type]) dragEl.appendChild(this.uiIcons[this.draggedItem.type].cloneNode()); const countSpan = document.createElement('span'); countSpan.className = 'item-count'; countSpan.innerText = this.draggedItem.count; dragEl.appendChild(countSpan); } else { dragEl.style.display = 'none'; }
         }
 
-        const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        const selected = this.inventory[this.selectedSlot]; 
+        const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
-        // ✨ THE FIX: Deep dispose function so removing an item doesn't crash the script
+        // ✨ THE FIX: Safe Group Disposal. We check if geometry exists before disposing.
         const clearWeapon = (parent, name) => {
             const obj = parent.getObjectByName(name);
             if (obj) {
                 parent.remove(obj);
                 obj.traverse(child => {
                     if (child.isMesh) {
-                        child.geometry.dispose();
-                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-                        else child.material.dispose();
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                            else child.material.dispose();
+                        }
                     }
                 });
             }
@@ -323,7 +326,7 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, -0.4, 0); mesh1st.rotation.set(Math.PI/2, 0, 0); 
+                mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, -0.2, -0.2); mesh1st.rotation.set(Math.PI/2, 0, 0); 
                 mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.75, 0); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
@@ -418,7 +421,9 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
+                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -501,6 +506,7 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
+                        this.world.removeBlock(bx, by, bz); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }

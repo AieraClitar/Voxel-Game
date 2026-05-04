@@ -195,6 +195,8 @@ if (window.io) {
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
     window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); });
+    
+    // ✨ FIX: Separated the Despawn Logic entirely so it doesn't trigger the Kill feed.
     window.socket.on('mobDespawned', (mobId) => { aiController.killMobLocal(mobId); });
 
     window.socket.on('playerDisconnected', (id) => {
@@ -257,10 +259,9 @@ for(let i=0; i<(isMobile ? 8 : 20); i++) {
 }
 scene.add(cloudGroup);
 
-// ✨ THE FIX: Preview Camera moved up so the Headless Bug is fixed!
 const previewCanvas = document.getElementById('preview-canvas'); const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, alpha: true, antialias: true }); previewRenderer.setSize(120, 200, false); previewRenderer.setClearColor(0x000000, 0); 
 const previewScene = new THREE.Scene(); const previewCamera = new THREE.PerspectiveCamera(50, 120/200, 0.1, 100); 
-previewCamera.position.set(0, 0.75, 4.0); // Shifted Y from -0.25 to 0.75
+previewCamera.position.set(0, 0.75, 4.0); 
 previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight = new THREE.DirectionalLight(0xffffff, 1.5); previewDirLight.position.set(5, 10, 7); previewScene.add(previewDirLight);
 
 const previewPlayer = new THREE.Group();
