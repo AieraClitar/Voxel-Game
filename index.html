@@ -158,12 +158,14 @@
         <div class="menu-bg"></div>
         <h1 class="game-title">Create New World</h1>
         <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
+        
+        <!-- ✨ THE FIX: Added World Passcode Field -->
+        <input type="password" id="world-passcode" class="mc-input" placeholder="World Passcode (Required)">
+
         <button id="btn-create-world" class="mc-btn">Create / Play</button>
-        <!-- ✨ Added Load Saved World Button -->
         <button id="btn-load-saved" class="mc-btn">Load Saved World</button>
         <button id="btn-back-menu" class="mc-btn">Back</button>
 
-        <!-- ✨ Added Saved Worlds Browser -->
         <div id="saved-browser">
             <button class="close-popup" id="close-saved">✖</button>
             <h3 style="margin-top: 0; color: #FFD700; text-align: center; border-bottom: 2px solid #444; padding-bottom: 10px;">Offline Saved Worlds</h3>
@@ -231,7 +233,6 @@
     <div id="pause-menu">
         <h1>Game Paused</h1>
         <button class="mc-btn" id="btn-resume">Resume Game</button>
-        <!-- ✨ Updated Pause Menu to Save & Exit -->
         <button class="mc-btn" id="btn-save-exit">Save & Exit</button>
         <div id="save-notif">Saving...</div>
     </div>
