@@ -117,7 +117,6 @@ if (window.io) {
         });
     });
 
-    // ✨ LOAD SAVED WORLDS BROWSER
     window.socket.on('savedWorldsList', (savedWorldsArray) => {
         const savedList = document.getElementById('saved-list'); if(!savedList) return;
         savedList.innerHTML = '';
@@ -128,19 +127,27 @@ if (window.io) {
             const info = document.createElement('span'); info.innerText = `💾 ${worldName}`;
             
             const hostBtn = document.createElement('button'); hostBtn.innerText = 'Host World'; hostBtn.className = 'mc-btn';
-            hostBtn.onclick = (e) => {
-                e.target.innerText = "Starting..."; e.target.classList.add('disabled');
-                localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
-                window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName });
-                AudioSys.init(); 
+            hostBtn.onclick = () => {
+                // ✨ UI FIX: Auto-fills the world name so they can just enter the passcode
+                document.getElementById('world-name-input').value = worldName;
+                document.getElementById('world-passcode').value = "";
+                document.getElementById('saved-browser').style.display = 'none';
+                document.getElementById('world-menu').style.display = 'flex';
+                document.getElementById('world-passcode').focus();
             };
             div.appendChild(info); div.appendChild(hostBtn); savedList.appendChild(div);
         });
     });
 
+    // ✨ UI FIX: Listen for Host Passcode errors
+    window.socket.on('hostError', (msg) => { 
+        alert(msg); 
+        const btn = document.getElementById('btn-create-world');
+        if (btn) { btn.innerText = "Create / Play"; btn.classList.remove('disabled'); }
+    });
+
     window.socket.on('joinError', (msg) => { alert(msg); location.reload(); });
 
-    // ✨ RESTORES SAVED PLAYER INVENTORY AND POSITION
     window.socket.on('restore_player_data', (data) => {
         player.camera.position.set(data.x, data.y, data.z);
         player.health = data.health;
@@ -149,7 +156,7 @@ if (window.io) {
             player.mainInventory = data.inventory.main;
             player.updateInventoryUI();
         }
-        window.showChat(`Welcome back, ${localPlayerName}! State restored.`);
+        window.showChat(`Welcome back! State restored.`);
     });
 
     window.socket.on('world_snapshot', (data) => {
@@ -234,14 +241,24 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(data.killerName); });
+    
+    // ✨ KILL MESSAGE FIX: Receives the formatted killerName string directly from the server
+    window.socket.on('mobKilled', (data) => { 
+        aiController.killMobLocal(data.mobId); 
+        if (data.killerName) window.showChat(data.killerName); 
+    });
+    
     window.socket.on('mobDespawned', (mobId) => { aiController.killMobLocal(mobId); });
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
-    window.socket.on('hostLeft', () => { alert("The Host has left the world. The connection was closed."); location.reload(); });
+    window.socket.on('hostLeft', (msg) => { 
+        alert(msg || "The Host has left the world."); 
+        location.reload(); 
+    });
+    
     window.socket.on('blockUpdate', (data) => { 
         const dist = player.camera.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z));
         if(data.action === 'add') { 
@@ -260,7 +277,6 @@ document.getElementById('btn-multiplayer').addEventListener('click', () => { doc
 const closeLobbyBtn = document.getElementById('close-lobby');
 if(closeLobbyBtn) closeLobbyBtn.addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'none'; });
 
-// ✨ SAVED WORLDS UI HANDLERS
 document.getElementById('btn-load-saved').addEventListener('click', () => { 
     if (window.socket) window.socket.emit('requestSavedWorlds');
     document.getElementById('saved-browser').style.display = 'block'; 
@@ -279,16 +295,22 @@ document.getElementById('btn-back-menu').addEventListener('click', () => {
     document.getElementById('main-menu').style.display = 'flex';
 });
 
+// ✨ THE FIX: Validates and sends passcode on host attempt
 document.getElementById('btn-create-world').addEventListener('click', (e) => {
+    const passcode = document.getElementById('world-passcode').value.trim();
+    if (!passcode) {
+        alert("A passcode is required to secure your world.");
+        return;
+    }
+
     e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
     localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
     const worldName = document.getElementById('world-name-input').value.trim() || "New World";
     
-    if (window.socket) window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName });
+    if (window.socket) window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName, passcode: passcode });
     AudioSys.init(); 
 });
 
-// ✨ SAVE & EXIT HANDLER
 document.getElementById('btn-save-exit').addEventListener('click', () => {
     if (window.socket && player.gameActive) {
         document.getElementById('save-notif').style.display = 'block';
@@ -300,7 +322,7 @@ document.getElementById('btn-save-exit').addEventListener('click', () => {
             z: player.camera.position.z,
             health: player.health
         });
-        setTimeout(() => location.reload(), 800); // Give it a moment to send data, then disconnect natively
+        // The server will instantly kick us via 'hostLeft', no need for setTimeouts
     }
 });
 
@@ -369,7 +391,6 @@ function animate() {
         document.getElementById('loading-progress').style.width = `${(initialChunksDone / initialChunksNeeded) * 100}%`;
         if (world.chunkQueue.length === 0) {
             isGeneratingWorld = false; let spawnY = world.getSurfaceHeight(16, 16) + 2;
-            // NOTE: If restore_player_data already set the position, it will override this
             if (player.velocity.x === 0 && player.velocity.z === 0) {
                 player.camera.position.set(16, spawnY, 16);
             }
