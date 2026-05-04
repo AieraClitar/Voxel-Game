@@ -25,6 +25,7 @@ dirLight.shadow.mapSize.width = 1024; dirLight.shadow.mapSize.height = 1024;
 scene.add(dirLight);
 const handLight = new THREE.PointLight(0xffaa44, 0, 14); scene.add(handLight);
 
+// Wait for Server to provide the deterministic Seed
 let world = new World(scene, 1); 
 const player = new Player(camera, document.body, world);
 const aiController = new AIController(scene, world, player);
@@ -68,7 +69,7 @@ if (window.io) {
             } else if (itemType === 'torch') {
                 mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                mesh = new Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(0, Math.PI / 4, 0);
             }
             mesh.name = 'equippedItem'; mesh.castShadow = true; armR.add(mesh);
         }
@@ -116,9 +117,11 @@ if (window.io) {
         });
     });
 
+    // ✨ SERVER SNAPSHOT RECONCILIATION
     window.socket.on('world_snapshot', (data) => {
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         
+        // Wipe local world completely and initialize with Server's seed to guarantee matching terrain
         scene.remove(world.dropGroup); scene.remove(world.particleGroup);
         for(const chunk of world.chunks.values()) scene.remove(chunk);
         
@@ -142,9 +145,11 @@ if (window.io) {
         Object.values(data.drops).forEach(d => { world.spawnNetworkedDrop(d.id, d.x, d.y, d.z, d.type); });
         aiController.syncFromServer(data.mobs);
 
+        // Force rebuild with Master Seed
         world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
     });
 
+    // ✨ 20-TPS SERVER TICK ENGINE
     window.socket.on('server_tick', (data) => {
         Object.keys(data.players).forEach(id => {
             if (id === window.socket.id || !networkPlayers.has(id)) return;
@@ -157,6 +162,19 @@ if (window.io) {
         aiController.syncFromServer(data.mobs);
     });
 
+    // ✨ PERIODIC HARD SYNC (Prevents missed packets)
+    window.socket.on('hard_sync', (data) => {
+        if(!data.blocks) return;
+        Object.keys(data.blocks).forEach(key => {
+            const [bx, by, bz] = key.split(',').map(Number);
+            if (world.serverBlocks.get(key) !== data.blocks[key]) {
+                world.serverBlocks.set(key, data.blocks[key]);
+                if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
+                else world.addBlock(bx, by, bz, data.blocks[key]);
+            }
+        });
+    });
+
     window.socket.on('newPlayer', (data) => {
         window.showChat(`🌍 ${data.player.name || "Guest"} joined the world!`);
         const mesh = createNetworkPlayer(data.player.name || "Guest");
@@ -164,11 +182,12 @@ if (window.io) {
         mesh.userData.targetPos.copy(mesh.position); scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
     });
 
+    // Server completely commands the client's inventory and objects
     window.socket.on('pickupSuccess', (type) => { player.pickupItem(type); });
     window.socket.on('item_spawned', (data) => { world.spawnNetworkedDrop(data.id, data.x, data.y, data.z, data.type); });
     window.socket.on('item_removed', (dropId) => { world.removeNetworkedDrop(dropId); });
     
-    // ✨ MULTIPLAYER PLAYER RED FLASH FIX
+    // Server Authority Damage routing
     window.socket.on('playerDamaged', (data) => { 
         if (data.id === window.socket.id) { player.takeDamage(data.dmg, data.source); AudioSys.hurt(); player.shakeIntensity = 0.6; }
         else if (networkPlayers.has(data.id)) {
@@ -180,8 +199,6 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type === 'archer' ? 'bow' : 'gun'); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    
-    // ✨ MULTIPLAYER KILL CHAT FIX
     window.socket.on('mobKilled', (data) => { 
         aiController.killMobLocal(data.mobId); 
         window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); 
@@ -282,7 +299,10 @@ function animate() {
     world.processChunkQueue();
     const delta = Math.min(clock.getDelta(), 0.1); 
     dayTime = ((Date.now() - localRoomStartTime) / 1000 / 240.0) % 1; world.sunArc = Math.sin(dayTime * Math.PI * 2); let angle = dayTime * Math.PI * 2;
-    document.getElementById('time-indicator').style.left = `${dayTime * 100}%`; document.getElementById('time-indicatorinnerText') = (dayTime > 0.5 && dayTime < 1.0) ? '🌙' : '☀️';
+    
+    // ✨ FIX: THIS IS THE TYPO THAT CRASHED THE GAME!
+    document.getElementById('time-indicator').style.left = `${dayTime * 100}%`; 
+    document.getElementById('time-indicator').innerText = (dayTime > 0.5 && dayTime < 1.0) ? '🌙' : '☀️';
 
     let hasRoof = false; let roofType = 'air';
     const bx = Math.round(player.camera.position.x); const bz = Math.round(player.camera.position.z); const by = Math.round(player.camera.position.y + 1.0); 
