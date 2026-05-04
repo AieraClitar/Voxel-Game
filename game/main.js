@@ -130,8 +130,6 @@ if (window.io) {
                 document.getElementById('lobby-browser').style.display = 'none'; document.getElementById('main-menu').style.display = 'none';
                 document.getElementById('loading-screen').style.display = 'flex';
                 if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-                
-                // Force chunks to start generating
                 world.updateChunks(new THREE.Vector3(16, 0, 16)); initialChunksNeeded = world.chunkQueue.length; initialChunksDone = 0; isGeneratingWorld = true;
                 player.gameActive = true; 
             };
