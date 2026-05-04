@@ -13,7 +13,7 @@ export class AIController {
         this.maxMobs = 10;
         this.mobIdCounter = 0;
         
-        // ✨ AUTHORITY FLAG: Assigned in main.js
+        // ✨ AUTHORITY FLAG: Set when joining/hosting
         this.isHost = false; 
         
         this.meleeTools = ['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick'];
@@ -101,7 +101,7 @@ export class AIController {
             id: id, type: type, mesh: mobGroup, armR: armR, legL: legL, legR: legR, armL: armL, head: head, weaponType: weaponType,
             health: 100, velocity: new THREE.Vector3(0, 0, 0), swingTime: Math.random() * 10,
             attackTimer: 0, attackAnimTimer: 0, hitFlinch: 0, isGrounded: false, speed: isZombie ? 3.5 : 2.5, burnTimer: 0, shadeTarget: null,
-            jumpCooldown: 0, targetPos: new THREE.Vector3(x, y, z), targetRy: 0, targetRx: 0 // Client Sync vars
+            jumpCooldown: 0, targetPos: new THREE.Vector3(x, y, z), targetRy: 0, targetRx: 0 // Interpolation vars
         };
 
         mobGroup.traverse((child) => { child.userData = { isMob: true, mobRef: mobObj }; });
@@ -201,7 +201,6 @@ export class AIController {
         if (this.isHost) return;
         const currentIds = new Set(dataList.map(d => d.id));
         
-        // Remove dead mobs
         for (let id of this.mobs.keys()) {
             if (!currentIds.has(id)) {
                 this.scene.remove(this.mobs.get(id).mesh);
@@ -225,7 +224,6 @@ export class AIController {
     update(delta) {
         const px = this.player.camera.position.x; const py = this.player.camera.position.y; const pz = this.player.camera.position.z;
 
-        // Projectiles (handled locally by everyone)
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             let p = this.projectiles[i]; p.life += delta;
             p.vel.y -= 15.0 * delta; 
@@ -261,7 +259,6 @@ export class AIController {
                 }
 
                 if (isBurning) {
-                    // Find shade logic...
                     if (!mob.shadeTarget) { let angle = Math.random() * Math.PI * 2; mob.shadeTarget = new THREE.Vector3(mesh.position.x + Math.cos(angle)*5, mesh.position.y, mesh.position.z + Math.sin(angle)*5); }
                     let dx = mob.shadeTarget.x - mesh.position.x; let dz = mob.shadeTarget.z - mesh.position.z;
                     let dist = Math.sqrt(dx*dx + dz*dz);
