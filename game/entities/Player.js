@@ -62,7 +62,6 @@ export class Player {
         const matPants = new THREE.MeshLambertMaterial({color: 0x222255}); const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat]; 
         
-        // ✨ THE FIX: Gapless unified skeleton matching AI Controller exactly
         this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); this.head.position.set(0, 1.75, 0); 
         this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, 1.125, 0); 
         this.armL = new THREE.Group(); this.armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
@@ -315,8 +314,14 @@ export class Player {
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
-                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
+                // UI FIX: Pull block down and outwards so it clears the arm geometry visually 
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); 
+                mesh1st.position.set(0, -0.3, -0.2); 
+                mesh1st.rotation.set(0, Math.PI / 4, 0); 
+                
+                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
+                mesh3rd.position.set(0, -0.75, -0.15); 
+                mesh3rd.rotation.set(0, Math.PI / 4, 0); 
             }
             mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
             mesh3rd.name = 'equippedItem3rd'; this.armR_3rd.add(mesh3rd);

@@ -40,7 +40,7 @@ export class World {
 
         this.itemMaterials = {
             stone: this.materials[2], dirt: this.materials[3], grass: this.materials[4], sand: this.materials[5], oak_wood: this.materials[9], birch_wood: this.materials[10], leaves: this.materials[11], oak_planks: this.materials[12], birch_planks: this.materials[16], crafting_table: this.materials[13], cactus: this.materials[14], torch: this.materials[15],
-            stick: toolMat('stick'), wooden_sword: toolMat('wooden_sword'), stone_sword: toolMat('stone_sword'), wooden_pickaxe: toolMat('wooden_pickaxe'), stone_pickaxe: toolMat('stone_pickaxe'), wooden_axe: toolMat('wooden_axe'), stone_axe: toolMat('stone_axe'), wooden_shovel: toolMat('wooden_shovel'), stone_shovel: toolMat('stone_shovel'), bow: toolMat('bow'), crossbow: toolMat('crossbow'), gun: toolMat('gun')
+            stick: toolMat('stick'), wooden_sword: toolMat('wooden_sword'), stone_sword: toolMat('stone_sword'), wooden_pickaxe: toolMat('stone_pickaxe'), wooden_axe: toolMat('wooden_axe'), stone_axe: toolMat('stone_axe'), wooden_shovel: toolMat('wooden_shovel'), stone_shovel: toolMat('stone_shovel'), bow: toolMat('bow'), crossbow: toolMat('crossbow'), gun: toolMat('gun')
         };
     }
 
@@ -133,7 +133,8 @@ export class World {
                     let localCactusRand = Math.abs(this.roughMap.random(wx, wz));
 
                     if (biome === 'desert' && height > WATER_LEVEL && localCactusRand < 0.01) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'cactus' }); }
-                    else if (biome !== 'desert' && height > WATER_LEVEL + 1) { 
+                    // BIOME FIX: Trees only spawn in plains
+                    else if (biome === 'plains' && height > WATER_LEVEL + 1) { 
                         let treeDensity = this.treeMap.getNoise(wx * 0.02, wz * 0.02); 
                         if (treeDensity > 0.1 && localTreeRand < 0.03) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'tree', rand: localTreeRand }); } 
                     }
