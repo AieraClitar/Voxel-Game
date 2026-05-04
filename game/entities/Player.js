@@ -99,7 +99,7 @@ export class Player {
             const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5)); 
             
-            // ✨ EMIT DROP TO SERVER SO EVERYONE SEES IT
+            // ✨ SERVER AUTHORITY: Client only emits intent. Drop renders when Server Broadcasts it.
             if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: item.type });
             
             item.count--; if (item.count <= 0) item.type = null;
@@ -294,6 +294,7 @@ export class Player {
             if (this.draggedItem.type) { 
                 const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5));
                 for(let c=0; c < this.draggedItem.count; c++) {
+                    // ✨ EMIT DROPS TO SERVER
                     if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.draggedItem.type });
                 }
                 this.draggedItem = {type: null, count: 0}; 
@@ -302,6 +303,7 @@ export class Player {
                 if (this.craftingGrid[i].type) { 
                     const dropDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion); const dropPos = this.camera.position.clone().add(dropDir.multiplyScalar(1.5));
                     for(let c=0; c < this.craftingGrid[i].count; c++) {
+                        // ✨ EMIT DROPS TO SERVER
                         if(window.socket) window.socket.emit('spawnDrop', { x: dropPos.x, y: dropPos.y, z: dropPos.z, type: this.craftingGrid[i].type });
                     }
                     this.craftingGrid[i] = {type: null, count: 0}; 
@@ -419,7 +421,7 @@ export class Player {
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
                     
-                    // ✨ MULTIPLAYER FIX: Send combat events to the Host server!
+                    // ✨ AUTHORITY SYNC: Send hit intent to Host to validate and execute
                     if (this.aiController.isHost) { this.aiController.damageMob(hitMob, dmg, this._kbDir); } 
                     else if (window.socket) { window.socket.emit('clientHitMob', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} }); }
                     this.shakeIntensity = 0.3; 
@@ -507,9 +509,9 @@ export class Player {
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
+                // ✨ AUTHORITY SYNC: Send pickup intent. Will only work if server validates it.
                 if (this.pickupItem(drop.type)) { 
                     if(window.socket) window.socket.emit('pickupDrop', drop.id);
-                    this.world.dropGroup.remove(drop.mesh); drop.mesh.geometry.dispose(); this.world.drops.splice(i, 1); 
                 }
             }
         }
