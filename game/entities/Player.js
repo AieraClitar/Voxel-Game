@@ -324,28 +324,29 @@ export class Player {
             let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
             let mesh1st, mesh3rd;
 
+            // ✨ THE FIX: Correctly positioned and rotated the 1st person meshes to appear in front of the camera, right side up.
             if (isTool(selected.type)) {
-                // ✨ FIX: Tools are now held prominently forward in the 1st person view!
                 mesh1st = create3DWeapon(selected.type); 
-                mesh1st.position.set(0, -0.1, -0.3); // Lifted up and pushed forward
-                mesh1st.rotation.set(Math.PI / 2, -Math.PI / 4, 0); // Angled forward correctly relative to the arm
+                // Positioned slightly right and down in the camera view
+                mesh1st.position.set(0.1, -0.2, -0.3); 
+                // Rotated so it points up and forward
+                mesh1st.rotation.set(Math.PI / 4, 0, 0); 
                 
                 mesh3rd = create3DWeapon(selected.type); 
                 mesh3rd.position.set(0, -0.75, 0); 
                 mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); 
-                mesh1st.position.set(0, -0.1, -0.2); 
-                mesh1st.rotation.set(Math.PI / 8, -Math.PI / 4, 0); 
+                mesh1st.position.set(0.1, -0.1, -0.3); 
+                mesh1st.rotation.set(Math.PI / 8, 0, 0); 
                 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); 
                 mesh3rd.position.set(0, -0.75, -0.15); 
                 mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                // ✨ FIX: Block alignment is lifted so it doesn't clip into the chest.
-                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
-                mesh1st.position.set(-0.1, 0.1, -0.2); // Positioned comfortably in the hand
-                mesh1st.rotation.set(Math.PI/8, Math.PI / 4, 0); 
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), mat); 
+                mesh1st.position.set(0.1, -0.1, -0.3); 
+                mesh1st.rotation.set(Math.PI / 8, Math.PI / 4, 0); 
                 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
                 mesh3rd.position.set(0, -0.75, -0.15); 
@@ -414,12 +415,6 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
-
-                if (type === 'torch') {
-                    this.world.removeBlock(bx, by, bz); 
-                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
-                    break; 
-                }
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
