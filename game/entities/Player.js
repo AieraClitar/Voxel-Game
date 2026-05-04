@@ -432,7 +432,7 @@ export class Player {
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
                 
-                // ✨ SERVER AUTHORITY: Send intent to Break
+                // ✨ SERVER AUTHORITY: Send intent to Break. Wait for server confirmation.
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -455,8 +455,9 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
-                    // ✨ SERVER AUTHORITY: Send intent to Place
+                    // ✨ SERVER AUTHORITY: Send intent to Place. Wait for server confirmation.
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -502,11 +503,11 @@ export class Player {
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
-                // ✨ DUPLICATION FIX: Do not increment inventory. Ask server, and hide local mesh immediately!
+                // ✨ ANTI-DUPE: Send pickup intent. Hide mesh instantly to prevent spam. Wait for Server.
                 if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; // Prevent spamming
-                    window.socket.emit('pickupDrop', { id: drop.id, type: drop.type });
-                    this.world.removeNetworkedDrop(drop.id);
+                    drop.isBeingPickedUp = true; 
+                    drop.mesh.visible = false; 
+                    window.socket.emit('pickupDrop', drop.id);
                 }
             }
         }
@@ -540,7 +541,7 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ SERVER AUTHORITY: Client only emits intent. Blocks are deleted ONLY when server updates.
+                        // ✨ SERVER AUTHORITY: Break intent
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }

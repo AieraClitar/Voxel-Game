@@ -147,7 +147,6 @@ if (window.io) {
         });
         window.updatePlayerList();
 
-        // Overwrite local terrain with Server Authority blocks
         world.serverBlocks.clear();
         Object.keys(data.blocks).forEach(key => {
             const [bx, by, bz] = key.split(',').map(Number);
@@ -160,6 +159,19 @@ if (window.io) {
         if(!window.isHost) aiController.syncFromServer(data.mobs);
     });
 
+    // ✨ PERIODIC HARD SYNC
+    window.socket.on('hard_sync', (data) => {
+        if(!data.blocks) return;
+        Object.keys(data.blocks).forEach(key => {
+            const [bx, by, bz] = key.split(',').map(Number);
+            if (world.serverBlocks.get(key) !== data.blocks[key]) {
+                world.serverBlocks.set(key, data.blocks[key]);
+                if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
+                else world.addBlock(bx, by, bz, data.blocks[key]);
+            }
+        });
+    });
+
     window.socket.on('newPlayer', (data) => {
         window.showChat(`🌍 ${data.player.name || "Guest"} joined the world!`);
         const mesh = createNetworkPlayer(data.player.name || "Guest");
@@ -168,7 +180,7 @@ if (window.io) {
         scene.add(mesh); networkPlayers.set(data.id, mesh); window.updatePlayerList();
     });
 
-    // ✨ ANTI-DUPE: Client only receives inventory when Server allows it
+    // ✨ SERVER VALIDATED INVENTORY PICKUP
     window.socket.on('pickupSuccess', (type) => {
         player.pickupItem(type);
     });
@@ -206,7 +218,18 @@ if (window.io) {
     });
 
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
-    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') world.addBlock(data.x, data.y, data.z, data.type); else world.removeBlock(data.x, data.y, data.z, true); });
+    
+    // ✨ SERVER AUTHORITATIVE BLOCK PLACEMENT/REMOVAL
+    window.socket.on('blockUpdate', (data) => { 
+        const key = `${data.x},${data.y},${data.z}`;
+        if(data.action === 'add') {
+            world.serverBlocks.set(key, data.type);
+            world.addBlock(data.x, data.y, data.z, data.type); 
+        } else {
+            world.serverBlocks.set(key, 'air');
+            world.removeBlock(data.x, data.y, data.z, true); 
+        }
+    });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });

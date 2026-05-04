@@ -69,6 +69,7 @@ export class World {
     }
 
     spawnParticles(x, y, z, type, isBlood = false) {
+        if (!type || type === 'air') return;
         const count = isBlood ? 8 : 12; const color = isBlood ? 0xcc0000 : (type.includes('leaves') ? 0x2d5a27 : (type.includes('wood') || type.includes('planks') ? 0x5c4033 : 0x888888));
         const mat = new THREE.MeshBasicMaterial({ color: color });
         for (let i = 0; i < count; i++) {
@@ -92,7 +93,7 @@ export class World {
                 const normal = this.torchNormals.get(`${tx},${ty},${tz}`); let attached = false;
                 if (off.f === 'y' && (!normal || normal.y === 1)) attached = true; if (off.f === 'x1' && normal && normal.x === 1) attached = true; if (off.f === 'x-1' && normal && normal.x === -1) attached = true; if (off.f === 'z1' && normal && normal.z === 1) attached = true; if (off.f === 'z-1' && normal && normal.z === -1) attached = true;
                 
-                // ✨ AUTHORITY SYNC: Intent to break torch!
+                // ✨ AUTHORITY SYNC: Intent to break torch cascaded to server
                 if (attached) { 
                     if(window.socket) window.socket.emit('requestBlockBreak', {x:tx, y:ty, z:tz, type:'torch'}); 
                 }
@@ -128,8 +129,16 @@ export class World {
                 }
 
                 if (this.getBlockType(wx, height, wz) !== 'air') {
-                    if (biome === 'desert' && height > WATER_LEVEL && Math.random() < 0.01) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'cactus' }); }
-                    else if (biome !== 'desert' && height > WATER_LEVEL + 1) { let treeDensity = this.treeMap.getNoise(wx * 0.02, wz * 0.02); if (treeDensity > 0.1 && Math.random() < 0.03) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'tree' }); } }
+                    // ✨ DESYNC FIX: Replaced Math.random() with deterministic noise mapping!
+                    // This guarantees the host and client ALWAYS generate the exact same trees at the exact same heights.
+                    let localTreeRand = Math.abs(this.treeMap.random(wx, wz)); 
+                    let localCactusRand = Math.abs(this.roughMap.random(wx, wz));
+
+                    if (biome === 'desert' && height > WATER_LEVEL && localCactusRand < 0.01) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'cactus' }); }
+                    else if (biome !== 'desert' && height > WATER_LEVEL + 1) { 
+                        let treeDensity = this.treeMap.getNoise(wx * 0.02, wz * 0.02); 
+                        if (treeDensity > 0.1 && localTreeRand < 0.03) { decoratorsToGenerate.push({ x: wx, y: height + 1, z: wz, type: 'tree', rand: localTreeRand }); } 
+                    }
                 }
             }
         }
@@ -137,14 +146,15 @@ export class World {
         decoratorsToGenerate.forEach(pos => {
             if (pos.type === 'cactus') { for(let cy = 0; cy < 3; cy++) this.setBlockData(pos.x, pos.y + cy, pos.z, 14); } 
             else {
-                const h = 4 + Math.floor(Math.random() * 2); let treeId = Math.random() < 0.5 ? 9 : 10;
+                // Deterministic Tree Heights based on the seed
+                const h = 4 + Math.floor(pos.rand * 10) % 2; let treeId = pos.rand < 0.015 ? 9 : 10;
                 for(let ty = 0; ty < h; ty++) this.setBlockData(pos.x, pos.y + ty, pos.z, treeId);
                 for(let ly = h - 2; ly <= h + 1; ly++) { let radius = ly === h + 1 ? 1.5 : 2.5; for(let lx = -2; lx <= 2; lx++) { for(let lz = -2; lz <= 2; lz++) { if (lx === 0 && lz === 0 && ly < h) continue; if (lx*lx + lz*lz <= radius*radius) { this.setBlockData(pos.x + lx, pos.y + ly, pos.z + lz, 11); } } } }
             }
         });
 
         // ✨ SERVER TRUTH OVERRIDE
-        // Prevents terrain generator from restoring destroyed blocks!
+        // Overwrite any natural generation with what the Server says actually happened
         if (this.serverBlocks) {
             for (let [key, typeStr] of this.serverBlocks.entries()) {
                 const [bx, by, bz] = key.split(',').map(Number);
