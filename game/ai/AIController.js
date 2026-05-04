@@ -66,16 +66,16 @@ export class AIController {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
         
-        const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
-        const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
+        // ✨ PERFECT ALIGNMENT: Bottom of legs is Y=0
+        const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.5, 0); head.castShadow = true;
+        const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 0.875, 0); torso.castShadow = true;
         
-        const armL = new THREE.Group(); armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
-        const armR = new THREE.Group(); armR.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
+        const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
-        // ✨ EXACT WEAPON ATTACHMENT
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
-            weaponMesh.position.set(0, -0.75, 0); // Position exactly at bottom of arm
+            weaponMesh.position.set(0, -0.75, 0); 
             weaponMesh.rotation.set(Math.PI / 2, 0, 0); 
             weaponMesh.castShadow = true; armR.add(weaponMesh);
         }
@@ -111,10 +111,8 @@ export class AIController {
         this.mobs.delete(id);
     }
 
-    // ✨ DISTINCT PROJECTILES & WEAPON SOUNDS
     shootProjectile(fromPos, toPos, type) {
-        const speed = type === 'gun' ? 60 : 35;
-        const projGroup = new THREE.Group();
+        const speed = type === 'gun' ? 60 : 35; const projGroup = new THREE.Group();
         
         if (type === 'gun') {
             const bullet = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.2), new THREE.MeshBasicMaterial({color: 0xffff00})); projGroup.add(bullet);
@@ -186,10 +184,8 @@ export class AIController {
             }
             if (mob.hitFlinch > 0) { mob.hitFlinch -= delta * 3; targetBodyRotX = -0.5 * mob.hitFlinch; }
 
-            // ✨ WEAPON SPECIFIC ANIMATIONS
             if (mob.type === 'archer' && mob.attackAnimTimer <= 0 && !mob.isMoving) { 
                 if(mob.weaponType === 'gun') { targetArmRX = -Math.PI / 2; targetArmLX = -Math.PI / 3; }
-                else if(mob.weaponType === 'crossbow') { targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; }
                 else { targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; }
             }
             
@@ -205,7 +201,8 @@ export class AIController {
                 this.scene.add(f); this.fireParticles.push({mesh: f, life: 1.0});
             }
             
-            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, 1.75 + Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
+            // ✨ FIX: Base height is 1.5. Perfectly matches Torso. No more floating heads!
+            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, 1.5 + Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
             mob.armL.rotation.x = THREE.MathUtils.lerp(mob.armL.rotation.x, targetArmLX, 12 * delta);
             mob.armR.rotation.x = THREE.MathUtils.lerp(mob.armR.rotation.x, targetArmRX, 15 * delta);
             mob.legL.rotation.x = THREE.MathUtils.lerp(mob.legL.rotation.x, targetLegLX, 15 * delta);
