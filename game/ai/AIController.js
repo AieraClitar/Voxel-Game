@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Textures } from '../utils/Textures.js';
 import { AudioSys } from '../utils/AudioSys.js';
 
-// ✨ CORRECTED 3D WEAPON RIGGING (Pivots perfectly in hands)
 export function create3DWeapon(type) {
     const group = new THREE.Group();
     const brownMat = new THREE.MeshLambertMaterial({color: 0x5c4033});
@@ -57,10 +56,7 @@ export class AIController {
 
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.5, 0.25); 
         this.geoArrow = new THREE.BoxGeometry(0.05, 0.05, 0.6); this.matArrow = new THREE.MeshLambertMaterial({color: 0xcccccc}); this.geoBullet = new THREE.BoxGeometry(0.1, 0.1, 0.1); this.matBullet = new THREE.MeshBasicMaterial({color: 0xffff00}); 
-        
-        // Fire Particles Array
-        this.fireParticles = [];
-        this.fireMat = new THREE.MeshBasicMaterial({color: 0xff5500, transparent: true, opacity: 0.8});
+        this.fireParticles = []; this.fireMat = new THREE.MeshBasicMaterial({color: 0xff5500, transparent: true, opacity: 0.8});
     }
 
     spawnMob(id, type, x, y, z, weaponType, faceType) {
@@ -75,14 +71,12 @@ export class AIController {
         const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 0.875, 0); torso.castShadow = true;
         const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
         
-        // ✨ PROPER ARM PIVOTS FOR WEAPONS
         const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
+        // ✨ CORRECT RIGGING: Puts weapon in hand instead of chest!
         if (weaponType) {
             const weaponMesh = create3DWeapon(weaponType);
-            // Translate down to the "hand" of the arm mesh (-0.75 from shoulder)
             weaponMesh.position.set(0, -0.75, 0); 
-            // Rotate forward perfectly into the palm
             weaponMesh.rotation.set(Math.PI / 2, 0, 0); 
             weaponMesh.castShadow = true; armR.add(weaponMesh);
         }
@@ -105,6 +99,7 @@ export class AIController {
     damageMobLocal(id, kbDir) {
         const mob = this.mobs.get(id); if (!mob) return;
         this.world.spawnParticles(mob.mesh.position.x, mob.mesh.position.y + 0.5, mob.mesh.position.z, 'blood', true);
+        if (AudioSys && AudioSys.hitFlesh) AudioSys.hitFlesh(mob.mesh.position.distanceTo(this.player.camera.position)); // ✨ ADDED AUDIO TRIGGER
         mob.mesh.children.forEach(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => { if(m && m.emissive) m.emissive.setHex(0xff0000); }); else if(child.material.emissive) child.material.emissive.setHex(0xff0000); } });
         setTimeout(() => { if(!mob.mesh) return; mob.mesh.children.forEach(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => { if(m && m.emissive) m.emissive.setHex(0x000000); }); else if(child.material.emissive) child.material.emissive.setHex(0x000000); } }); }, 200);
         mob.hitFlinch = 1.0; 
@@ -184,17 +179,15 @@ export class AIController {
             }
             if (mob.hitFlinch > 0) { mob.hitFlinch -= delta * 3; targetBodyRotX = -0.5 * mob.hitFlinch; }
 
-            // ✨ ARCHER AIMING ANIMATION FIX
             if (mob.type === 'archer' && mob.attackAnimTimer <= 0 && mob.isMoving === false) { 
-                targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; // Aims bow forward
+                targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; 
             }
             if (mob.attackAnimTimer > 0) {
                 mob.attackAnimTimer -= delta;
                 let strike = Math.sin((mob.attackAnimTimer / (mob.type === 'archer' ? 0.5 : 0.3)) * Math.PI) * 1.5;
-                if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.3; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; // Strike forward for zombies
+                if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.3; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; 
             }
             
-            // ✨ FIRE PARTICLE SYSTEM
             if (mob.isBurning && Math.random() < 0.2) {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,0.15), this.fireMat);
                 f.position.set(mob.mesh.position.x + (Math.random()-0.5)*0.6, mob.mesh.position.y + Math.random()*1.5, mob.mesh.position.z + (Math.random()-0.5)*0.6);

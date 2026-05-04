@@ -66,6 +66,7 @@ export class Player {
         this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, -0.625, 0); 
         this.armL = new THREE.Group(); this.armL.position.set(-0.425, -0.25, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
         this.armR_3rd = new THREE.Group(); this.armR_3rd.position.set(0.425, -0.25, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; this.armR_3rd.add(armRMesh);
+        
         this.legL = new THREE.Group(); this.legL.position.set(-0.15, -1.0, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; this.legL.add(legLMesh);
         this.legR = new THREE.Group(); this.legR.position.set(0.15, -1.0, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; this.legR.add(legRMesh);
 
@@ -307,7 +308,6 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                // ✨ FIX: Hands now hold 3D tools!
                 mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, 0.3, -0.15); mesh1st.rotation.set(-Math.PI/4, 0, 0); 
                 mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.3, 0.15); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
@@ -380,6 +380,13 @@ export class Player {
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
 
+                // ✨ CLIENT PREDICTION: Instant Local Breaking for smooth gameplay!
+                if (type === 'torch') {
+                    this.world.removeBlock(bx, by, bz); 
+                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
+                    break; 
+                }
+
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
@@ -402,7 +409,10 @@ export class Player {
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
+                    // ✨ CLIENT PREDICTION: Instant Local Placing for smooth gameplay!
+                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                    
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
                 break;
@@ -449,7 +459,9 @@ export class Player {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
                 if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; drop.mesh.visible = false; window.socket.emit('requestPickup', drop.id);
+                    drop.isBeingPickedUp = true; 
+                    drop.mesh.visible = false; 
+                    window.socket.emit('requestPickup', drop.id);
                 }
             }
         }
@@ -483,6 +495,8 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
+                        // ✨ CLIENT PREDICTION: Instant Break, followed by server confirmation
+                        this.world.removeBlock(bx, by, bz); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }

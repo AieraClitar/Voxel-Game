@@ -51,8 +51,6 @@ export const Textures = {
             ctx.beginPath(); ctx.arc(8, 8, 3, 0, Math.PI*2); ctx.stroke(); 
             ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI*2); ctx.stroke(); 
         }
-        
-        // ✨ FIX: Restored missing Planks and Crafting Table textures with distinct wood types!
         else if (type === 'oak_planks') { 
             fillBase('#8b5a2b'); addNoise(20, 0.2); 
             ctx.fillStyle = 'rgba(0,0,0,0.4)'; 
@@ -77,7 +75,14 @@ export const Textures = {
             ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 7, 16, 2); ctx.fillRect(0, 14, 16, 2); 
             ctx.fillRect(0, 0, 2, 16); ctx.fillRect(7, 0, 2, 16); ctx.fillRect(14, 0, 2, 16); 
         }
-
+        // ✨ FIX: Missing Cactus Texture added to replace the Magenta placeholder
+        else if (type === 'cactus') { 
+            fillBase('#2ecc71'); addNoise(15, 0.2); 
+            ctx.fillStyle = '#1e8449'; 
+            for(let x=0; x<16; x+=2) ctx.fillRect(x, 0, 1, 16); 
+            ctx.fillStyle = '#000000';
+            for(let i=0; i<15; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); 
+        }
         else if (type === 'torch') { ctx.fillStyle = '#5c4033'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#ffaa00'; ctx.fillRect(0,0,16,6); ctx.fillStyle = '#ffffff'; ctx.fillRect(4,0,8,3); }
         else if (type === 'sun') { ctx.fillStyle = '#FFD700'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(2, 2, 12, 12); }
         else if (type === 'moon') { ctx.fillStyle = '#DDDDDD'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = '#AAAAAA'; ctx.fillRect(2, 2, 4, 4); ctx.fillRect(10, 8, 3, 3); }
@@ -138,7 +143,7 @@ export const Textures = {
                 ctx.fillStyle = handleColor; ctx.fillRect(-15, 0, 50, 30); ctx.strokeRect(-15, 0, 50, 30);
             }
         } else {
-            fillBase('#ff00ff'); // Fallback magenta for missing textures
+            fillBase('#ff00ff'); 
         }
 
         const texture = new THREE.CanvasTexture(canvas);
