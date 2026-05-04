@@ -157,6 +157,18 @@ if (window.io) {
         aiController.syncFromServer(data.mobs);
     });
 
+    window.socket.on('hard_sync', (data) => {
+        if(!data.blocks) return;
+        Object.keys(data.blocks).forEach(key => {
+            const [bx, by, bz] = key.split(',').map(Number);
+            if (world.serverBlocks.get(key) !== data.blocks[key]) {
+                world.serverBlocks.set(key, data.blocks[key]);
+                if (data.blocks[key] === 'air') world.removeBlock(bx, by, bz, true);
+                else world.addBlock(bx, by, bz, data.blocks[key]);
+            }
+        });
+    });
+
     window.socket.on('newPlayer', (data) => {
         window.showChat(`🌍 ${data.player.name || "Guest"} joined the world!`);
         const mesh = createNetworkPlayer(data.player.name || "Guest");
@@ -177,29 +189,20 @@ if (window.io) {
         }
     });
     
-    window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type === 'archer' ? 'bow' : 'gun'); });
+    window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); });
+    
+    window.socket.on('mobKilled', (data) => { 
+        aiController.killMobLocal(data.mobId); 
+        window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); 
+    });
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
     window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
-    
-    // ✨ FIX: Triggers audio and particles on receiving block changes!
-    window.socket.on('blockUpdate', (data) => { 
-        const dist = player.camera.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z));
-        if(data.action === 'add') { 
-            world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); 
-            world.addBlock(data.x, data.y, data.z, data.type, null, true); 
-            if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass(dist);
-        } else { 
-            world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); 
-            world.removeBlock(data.x, data.y, data.z, false, true); 
-            if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock(dist);
-        } 
-    });
+    window.socket.on('blockUpdate', (data) => { if(data.action === 'add') { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, data.type); world.addBlock(data.x, data.y, data.z, data.type, null, true); } else { world.serverBlocks.set(`${data.x},${data.y},${data.z}`, 'air'); world.removeBlock(data.x, data.y, data.z, false, true); } });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });

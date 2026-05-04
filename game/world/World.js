@@ -11,14 +11,12 @@ const BLOCK_TYPES = {
 const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
 export class World {
-    // ✨ DETERMINISTIC SEED
     constructor(scene, seed = 42) {
         this.scene = scene;
         this.heightMap = new SimpleNoise(seed); this.roughMap = new SimpleNoise(seed + 1337); this.tempMap = new SimpleNoise(seed + 555); this.humidMap = new SimpleNoise(seed + 999); this.treeMap = new SimpleNoise(seed + 888); 
         this.chunkData = new Map(); this.chunks = new Map(); this.chunkDataState = new Map(); this.chunkMeshState = new Map(); 
         this.torchNormals = new Map(); this.lightSources = new Map(); this.chunkQueue = []; this.sunArc = 0;
         
-        // ✨ SERVER TRUTH CACHE
         this.serverBlocks = new Map();
 
         this.drops = []; this.dropGroup = new THREE.Group(); this.scene.add(this.dropGroup);
@@ -131,7 +129,6 @@ export class World {
                 }
 
                 if (this.getBlockType(wx, height, wz) !== 'air') {
-                    // Math.random() removed entirely to prevent client divergence
                     let localTreeRand = Math.abs(this.treeMap.random(wx, wz)); 
                     let localCactusRand = Math.abs(this.roughMap.random(wx, wz));
 
@@ -153,7 +150,6 @@ export class World {
             }
         });
 
-        // ✨ SERVER TRUTH OVERRIDE
         if (this.serverBlocks) {
             for (let [key, typeStr] of this.serverBlocks.entries()) {
                 const [bx, by, bz] = key.split(',').map(Number);

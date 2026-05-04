@@ -58,7 +58,7 @@ export const AudioSys = {
         
         const noise = this.ctx.createBufferSource(); noise.buffer = buffer; noise.loop = true;
         const filter = this.ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 300;
-        const gain = this.ctx.createGain(); gain.gain.value = 0.02; // Gentle wind
+        const gain = this.ctx.createGain(); gain.gain.value = 0.02; 
         
         noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination);
         noise.start();
@@ -74,5 +74,6 @@ export const AudioSys = {
     breakBlock: function(dist = 0) { this.playTone(100 + Math.random()*40, 'triangle', 0.2, this.getDistVol(dist, 0.15), 50); this.playNoise(0.2, 0.1, 1000); },
     shootGun: function(dist = 0) { this.playNoise(0.3, this.getDistVol(dist, 0.3), 3000); this.playTone(100, 'sawtooth', 0.2, this.getDistVol(dist, 0.2), 80); },
     shootBow: function(dist = 0) { this.playTone(400, 'sine', 0.2, this.getDistVol(dist, 0.1), 200); },
+    shootCrossbow: function(dist = 0) { this.playTone(300, 'triangle', 0.1, this.getDistVol(dist, 0.15), 50); this.playNoise(0.1, this.getDistVol(dist, 0.1), 800); },
     hurt: function() { this.playTone(200, 'sawtooth', 0.3, 0.3, 100); }
 };

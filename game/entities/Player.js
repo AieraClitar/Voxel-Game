@@ -62,13 +62,13 @@ export class Player {
         const matPants = new THREE.MeshLambertMaterial({color: 0x222255}); const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, faceMat]; 
         
-        this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); this.head.position.set(0, 0, 0); 
-        this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, -0.625, 0); 
-        this.armL = new THREE.Group(); this.armL.position.set(-0.425, -0.25, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
-        this.armR_3rd = new THREE.Group(); this.armR_3rd.position.set(0.425, -0.25, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; this.armR_3rd.add(armRMesh);
+        this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); this.head.position.set(0, 1.75, 0); 
+        this.torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), new THREE.MeshLambertMaterial({color: 0x3333aa})); this.torso.position.set(0, 1.125, 0); 
+        this.armL = new THREE.Group(); this.armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armLMesh.position.y = -0.375; this.armL.add(armLMesh);
+        this.armR_3rd = new THREE.Group(); this.armR_3rd.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armRMesh.position.y = -0.375; this.armR_3rd.add(armRMesh);
         
-        this.legL = new THREE.Group(); this.legL.position.set(-0.15, -1.0, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; this.legL.add(legLMesh);
-        this.legR = new THREE.Group(); this.legR.position.set(0.15, -1.0, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; this.legR.add(legRMesh);
+        this.legL = new THREE.Group(); this.legL.position.set(-0.15, 0.5, 0); const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legLMesh.position.y = -0.25; this.legL.add(legLMesh);
+        this.legR = new THREE.Group(); this.legR.position.set(0.15, 0.5, 0); const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.5, 0.25), matPants); legRMesh.position.y = -0.25; this.legR.add(legRMesh);
 
         this.bodyGroup.add(this.head, this.torso, this.armL, this.armR_3rd, this.legL, this.legR);
         this.legSwingTimer = 0; this.raycaster = new THREE.Raycaster(); this.initControls(); this.updateInventoryUI(); 
@@ -298,7 +298,8 @@ export class Player {
             if (this.draggedItem.type !== null && this.draggedItem.count > 0) { dragEl.style.display = 'block'; if (this.uiIcons[this.draggedItem.type]) dragEl.appendChild(this.uiIcons[this.draggedItem.type].cloneNode()); const countSpan = document.createElement('span'); countSpan.className = 'item-count'; countSpan.innerText = this.draggedItem.count; dragEl.appendChild(countSpan); } else { dragEl.style.display = 'none'; }
         }
 
-        const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        const selected = this.inventory[this.selectedSlot]; 
+        const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
         const old1st = this.arm.getObjectByName('equippedItem1st'); if (old1st) { this.arm.remove(old1st); if(old1st.geometry) old1st.geometry.dispose(); }
         const old3rd = this.armR_3rd.getObjectByName('equippedItem3rd'); if (old3rd) { this.armR_3rd.remove(old3rd); if(old3rd.geometry) old3rd.geometry.dispose(); }
@@ -308,13 +309,14 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, 0.3, -0.15); mesh1st.rotation.set(-Math.PI/4, 0, 0); 
-                mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.3, 0.15); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
+                // ✨ FIX: Properly attaches 3D weapon meshes to player views!
+                mesh1st = create3DWeapon(selected.type); mesh1st.position.set(0, -0.4, 0); mesh1st.rotation.set(Math.PI/2, 0, 0); 
+                mesh3rd = create3DWeapon(selected.type); mesh3rd.position.set(0, -0.75, 0); mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
-                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.position.set(0, 0.3, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
             }
             mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
@@ -345,7 +347,8 @@ export class Player {
         if (buttonIdx === 0) {
             this.attackAnimTimer = 0.25;
             if(tool === 'gun') { if(AudioSys && AudioSys.shootGun) AudioSys.shootGun(); this.shakeIntensity = 0.4; this.muzzleFlash.intensity = 15; }
-            else if(tool === 'bow' || tool === 'crossbow') { if(AudioSys && AudioSys.shootBow) AudioSys.shootBow(); this.shakeIntensity = 0.2; }
+            else if(tool === 'crossbow') { if(AudioSys && AudioSys.shootCrossbow) AudioSys.shootCrossbow(); this.shakeIntensity = 0.3; }
+            else if(tool === 'bow') { if(AudioSys && AudioSys.shootBow) AudioSys.shootBow(); this.shakeIntensity = 0.2; }
             else { if(AudioSys && AudioSys.playNoise) AudioSys.playNoise(0.1, 0.05, 500); }
         }
 
@@ -459,9 +462,7 @@ export class Player {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
                 if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; 
-                    drop.mesh.visible = false; 
-                    window.socket.emit('requestPickup', drop.id);
+                    drop.isBeingPickedUp = true; drop.mesh.visible = false; window.socket.emit('requestPickup', drop.id);
                 }
             }
         }
@@ -495,8 +496,6 @@ export class Player {
                     
                     if (this.miningTimer >= this.miningDurability) {
                         const blockType = this.world.getBlockType(bx, by, bz);
-                        // ✨ CLIENT PREDICTION: Instant Break, followed by server confirmation
-                        this.world.removeBlock(bx, by, bz); 
                         if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: blockType });
                         this.stopMining();
                     }

@@ -4,19 +4,19 @@ import { AudioSys } from '../utils/AudioSys.js';
 
 export function create3DWeapon(type) {
     const group = new THREE.Group();
-    const brownMat = new THREE.MeshLambertMaterial({color: 0x5c4033});
-    const grayMat = new THREE.MeshLambertMaterial({color: 0x7f8c8d});
-    const woodMat = new THREE.MeshLambertMaterial({color: 0x8b5a2b});
+    if (!type || type === 'none') return group;
+    
+    const brownMat = new THREE.MeshLambertMaterial({color: 0x5c4033}); const grayMat = new THREE.MeshLambertMaterial({color: 0x7f8c8d}); const woodMat = new THREE.MeshLambertMaterial({color: 0x8b5a2b});
     const headMat = (type.includes('stone') || type === 'gun') ? grayMat : woodMat;
 
     if (type.includes('sword')) {
         const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), brownMat); handle.position.y = 0.1;
-        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.04), brownMat); guard.position.y = 0.2;
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.02), headMat); blade.position.y = 0.45;
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.04), brownMat); guard.position.y = 0.22;
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.02), headMat); blade.position.y = 0.49;
         group.add(handle, guard, blade);
     } else if (type.includes('pickaxe')) {
         const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.04), headMat); head.position.y = 0.5;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.04), headMat); head.position.y = 0.48;
         group.add(handle, head);
     } else if (type.includes('axe')) {
         const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25;
@@ -27,18 +27,18 @@ export function create3DWeapon(type) {
         const head = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.02), headMat); head.position.y = 0.5;
         group.add(handle, head);
     } else if (type === 'bow') {
-        const string = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.5, 0.01), new THREE.MeshLambertMaterial({color: 0xdddddd})); string.position.x = -0.05; string.position.y = 0.25;
+        const string = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.5, 0.01), new THREE.MeshLambertMaterial({color: 0xdddddd})); string.position.set(-0.05, 0.25, 0);
         const top = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.04), brownMat); top.position.set(0, 0.45, 0); top.rotation.z = -0.3;
         const bot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.04), brownMat); bot.position.set(0, 0.05, 0); bot.rotation.z = 0.3;
         const mid = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.05), brownMat); mid.position.y = 0.25;
         group.add(string, top, bot, mid);
     } else if (type === 'crossbow') {
         const stock = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.04), brownMat); stock.position.y = 0.2;
-        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.04), grayMat); bow.position.y = 0.4;
+        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.04), grayMat); bow.position.y = 0.35;
         group.add(stock, bow);
     } else if (type === 'gun') {
         const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.04), grayMat); barrel.position.set(0, 0.2, 0.05); barrel.rotation.x = Math.PI/2;
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.04), brownMat); grip.position.set(0, 0.1, 0);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.04), brownMat); grip.position.set(0, 0.075, 0);
         group.add(barrel, grip);
     } else if (type === 'stick') {
         const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25; group.add(handle);
@@ -55,7 +55,6 @@ export class AIController {
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); this.geoLimb = new THREE.BoxGeometry(0.25, 0.75, 0.25); this.geoLeg = new THREE.BoxGeometry(0.25, 0.5, 0.25); 
-        this.geoArrow = new THREE.BoxGeometry(0.05, 0.05, 0.6); this.matArrow = new THREE.MeshLambertMaterial({color: 0xcccccc}); this.geoBullet = new THREE.BoxGeometry(0.1, 0.1, 0.1); this.matBullet = new THREE.MeshBasicMaterial({color: 0xffff00}); 
         this.fireParticles = []; this.fireMat = new THREE.MeshBasicMaterial({color: 0xff5500, transparent: true, opacity: 0.8});
     }
 
@@ -67,16 +66,16 @@ export class AIController {
         const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
         const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
         
-        const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.5, 0); head.castShadow = true;
-        const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 0.875, 0); torso.castShadow = true;
-        const armL = new THREE.Group(); armL.position.set(-0.425, 1.25, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
+        const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
         
-        const armR = new THREE.Group(); armR.position.set(0.425, 1.25, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
+        const armL = new THREE.Group(); armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
+        const armR = new THREE.Group(); armR.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
-        // ✨ CORRECT RIGGING: Puts weapon in hand instead of chest!
-        if (weaponType) {
+        // ✨ EXACT WEAPON ATTACHMENT
+        if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
-            weaponMesh.position.set(0, -0.75, 0); 
+            weaponMesh.position.set(0, -0.75, 0); // Position exactly at bottom of arm
             weaponMesh.rotation.set(Math.PI / 2, 0, 0); 
             weaponMesh.castShadow = true; armR.add(weaponMesh);
         }
@@ -98,8 +97,8 @@ export class AIController {
 
     damageMobLocal(id, kbDir) {
         const mob = this.mobs.get(id); if (!mob) return;
-        this.world.spawnParticles(mob.mesh.position.x, mob.mesh.position.y + 0.5, mob.mesh.position.z, 'blood', true);
-        if (AudioSys && AudioSys.hitFlesh) AudioSys.hitFlesh(mob.mesh.position.distanceTo(this.player.camera.position)); // ✨ ADDED AUDIO TRIGGER
+        this.world.spawnParticles(mob.mesh.position.x, mob.mesh.position.y + 1.0, mob.mesh.position.z, 'blood', true);
+        if (AudioSys && AudioSys.hitFlesh) AudioSys.hitFlesh(mob.mesh.position.distanceTo(this.player.camera.position)); 
         mob.mesh.children.forEach(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => { if(m && m.emissive) m.emissive.setHex(0xff0000); }); else if(child.material.emissive) child.material.emissive.setHex(0xff0000); } });
         setTimeout(() => { if(!mob.mesh) return; mob.mesh.children.forEach(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => { if(m && m.emissive) m.emissive.setHex(0x000000); }); else if(child.material.emissive) child.material.emissive.setHex(0x000000); } }); }, 200);
         mob.hitFlinch = 1.0; 
@@ -112,12 +111,17 @@ export class AIController {
         this.mobs.delete(id);
     }
 
+    // ✨ DISTINCT PROJECTILES & WEAPON SOUNDS
     shootProjectile(fromPos, toPos, type) {
-        const isGun = type === 'gun'; const speed = isGun ? 60 : 30;
+        const speed = type === 'gun' ? 60 : 35;
         const projGroup = new THREE.Group();
         
-        if (isGun) {
-            const bullet = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.1), new THREE.MeshBasicMaterial({color: 0xffff00})); projGroup.add(bullet);
+        if (type === 'gun') {
+            const bullet = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.2), new THREE.MeshBasicMaterial({color: 0xffff00})); projGroup.add(bullet);
+        } else if (type === 'crossbow') {
+            const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.25), new THREE.MeshLambertMaterial({color: 0x3e2723})); 
+            const tip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.05), new THREE.MeshLambertMaterial({color: 0x7f8c8d})); tip.position.z = -0.125;
+            projGroup.add(shaft, tip);
         } else {
             const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.4), new THREE.MeshLambertMaterial({color: 0x5c4033}));
             const tip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.05), new THREE.MeshLambertMaterial({color: 0x7f8c8d})); tip.position.z = -0.2;
@@ -127,7 +131,10 @@ export class AIController {
         
         projGroup.position.set(fromPos.x, fromPos.y, fromPos.z); this.scene.add(projGroup);
         let distToPlayer = fromPos.distanceTo(this.player.camera.position);
-        isGun ? AudioSys.shootGun(distToPlayer) : AudioSys.shootBow(distToPlayer);
+        
+        if (type === 'gun') { if(AudioSys.shootGun) AudioSys.shootGun(distToPlayer); }
+        else if (type === 'crossbow') { if(AudioSys.shootCrossbow) AudioSys.shootCrossbow(distToPlayer); }
+        else { if(AudioSys.shootBow) AudioSys.shootBow(distToPlayer); }
         
         const dir = new THREE.Vector3().subVectors(toPos, projGroup.position);
         const distance = dir.length(); dir.normalize();
@@ -143,7 +150,7 @@ export class AIController {
 
             let dx = projGroup.position.x - this.player.camera.position.x; let dz = projGroup.position.z - this.player.camera.position.z; let dy = projGroup.position.y - this.player.camera.position.y;
             if (Math.sqrt(dx*dx + dz*dz) < 0.6 && dy < 0.2 && dy > -1.6) {
-                 if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: isGun ? 35 : 15, source: isGun ? 'Gunshot' : 'Arrow' });
+                 if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: type==='gun'?35:type==='crossbow'?25:15, source: type });
                  this.scene.remove(projGroup); clearInterval(projInterval);
             } else if (this.world.getBlockType(Math.round(projGroup.position.x), Math.round(projGroup.position.y), Math.round(projGroup.position.z)) !== 'air') {
                  this.scene.remove(projGroup); clearInterval(projInterval);
@@ -179,22 +186,26 @@ export class AIController {
             }
             if (mob.hitFlinch > 0) { mob.hitFlinch -= delta * 3; targetBodyRotX = -0.5 * mob.hitFlinch; }
 
-            if (mob.type === 'archer' && mob.attackAnimTimer <= 0 && mob.isMoving === false) { 
-                targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; 
+            // ✨ WEAPON SPECIFIC ANIMATIONS
+            if (mob.type === 'archer' && mob.attackAnimTimer <= 0 && !mob.isMoving) { 
+                if(mob.weaponType === 'gun') { targetArmRX = -Math.PI / 2; targetArmLX = -Math.PI / 3; }
+                else if(mob.weaponType === 'crossbow') { targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; }
+                else { targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; }
             }
+            
             if (mob.attackAnimTimer > 0) {
                 mob.attackAnimTimer -= delta;
                 let strike = Math.sin((mob.attackAnimTimer / (mob.type === 'archer' ? 0.5 : 0.3)) * Math.PI) * 1.5;
-                if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.3; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; 
+                if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.1; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; 
             }
             
             if (mob.isBurning && Math.random() < 0.2) {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(0.15,0.15,0.15), this.fireMat);
-                f.position.set(mob.mesh.position.x + (Math.random()-0.5)*0.6, mob.mesh.position.y + Math.random()*1.5, mob.mesh.position.z + (Math.random()-0.5)*0.6);
+                f.position.set(mob.mesh.position.x + (Math.random()-0.5)*0.6, mob.mesh.position.y + 0.5 + Math.random()*1.5, mob.mesh.position.z + (Math.random()-0.5)*0.6);
                 this.scene.add(f); this.fireParticles.push({mesh: f, life: 1.0});
             }
             
-            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, 1.5 + Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
+            mob.head.position.y = THREE.MathUtils.lerp(mob.head.position.y, 1.75 + Math.sin(performance.now() * 0.003) * 0.03, 5 * delta);
             mob.armL.rotation.x = THREE.MathUtils.lerp(mob.armL.rotation.x, targetArmLX, 12 * delta);
             mob.armR.rotation.x = THREE.MathUtils.lerp(mob.armR.rotation.x, targetArmRX, 15 * delta);
             mob.legL.rotation.x = THREE.MathUtils.lerp(mob.legL.rotation.x, targetLegLX, 15 * delta);
