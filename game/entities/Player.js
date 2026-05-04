@@ -46,7 +46,7 @@ export class Player {
         this.shakeIntensity = 0;
         this.footstepTimer = 0;
         
-        // ✨ MULTIPLAYER FIX: Track the last time we sent position data to the server
+        // Track the last time we sent position data to the server
         this.lastNetUpdate = 0;
 
         this.inventory = [{ type: 'torch', count: 10 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }];
@@ -652,7 +652,10 @@ export class Player {
         this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
         let rayTargets = [];
         for (const chunkGroup of this.world.chunks.values()) rayTargets.push(chunkGroup);
-        if (this.aiController) { for (const mob of this.aiController.mobs) rayTargets.push(mob.mesh); }
+        if (this.aiController) { 
+            // We now use Maps for synced mobs
+            for (const mob of this.aiController.mobs.values()) rayTargets.push(mob.mesh); 
+        }
         const intersects = this.raycaster.intersectObjects(rayTargets, true);
 
         for (let intersect of intersects) {
@@ -672,7 +675,14 @@ export class Player {
                     if (tool === 'gun') dmg = 50; if (tool === 'bow') dmg = 25; if (tool === 'crossbow') dmg = 35;       
 
                     this._kbDir.subVectors(hitMob.mesh.position, this.camera.position).normalize(); this._kbDir.y = 0;
-                    if (this.aiController) this.aiController.damageMob(hitMob, dmg, this._kbDir);
+                    
+                    // ✨ MULTIPLAYER FIX: Send combat events to the Host server!
+                    if (this.aiController.isHost) {
+                        this.aiController.damageMob(hitMob, dmg, this._kbDir);
+                    } else if (window.socket) {
+                        window.socket.emit('clientHitMob', { id: hitMob.id, dmg: dmg, kbDir: {x: this._kbDir.x, y: 0, z: this._kbDir.z} });
+                    }
+                    
                     this.shakeIntensity = 0.3; 
                 }
                 return; 
@@ -711,7 +721,6 @@ export class Player {
                     let nz = bz + Math.round(normal.z);
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     
-                    // ✨ MULTIPLAYER EMIT: Broadcast the placed block
                     if(window.socket) window.socket.emit('blockUpdate', {action: 'add', x: nx, y: ny, z: nz, type: selected.type});
 
                     selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
@@ -879,7 +888,6 @@ export class Player {
                         this.world.spawnItemDrop(bx, by, bz, blockType);
                         if(AudioSys && AudioSys.breakBlock) AudioSys.breakBlock();
                         
-                        // ✨ MULTIPLAYER EMIT: Broadcast the broken block
                         if(window.socket) window.socket.emit('blockUpdate', {action: 'remove', x: bx, y: by, z: bz});
                         
                         this.stopMining();
@@ -907,15 +915,18 @@ export class Player {
             this.armGroup.visible = false;
         }
 
-        // ✨ MULTIPLAYER EMIT: Send position updates to the server
+        // ✨ MULTIPLAYER EMIT: Sync full comprehensive state!
         if (window.socket && this.gameActive) {
-            if (performance.now() - this.lastNetUpdate > 50) { // Limit to 20 updates a second to save bandwidth
+            if (performance.now() - this.lastNetUpdate > 50) { 
                 window.socket.emit('move', {
                     x: this.camera.position.x,
-                    y: this.camera.position.y - 1.5, // Send exact body position
+                    y: this.camera.position.y - 1.5,
                     z: this.camera.position.z,
                     ry: this._euler.y,
-                    rx: this._euler.x 
+                    rx: this._euler.x,
+                    heldItem: this.inventory[this.selectedSlot]?.type || null,
+                    isAttacking: this.attackAnimTimer > 0,
+                    health: this.health
                 });
                 this.lastNetUpdate = performance.now();
             }
