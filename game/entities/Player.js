@@ -298,10 +298,8 @@ export class Player {
             if (this.draggedItem.type !== null && this.draggedItem.count > 0) { dragEl.style.display = 'block'; if (this.uiIcons[this.draggedItem.type]) dragEl.appendChild(this.uiIcons[this.draggedItem.type].cloneNode()); const countSpan = document.createElement('span'); countSpan.className = 'item-count'; countSpan.innerText = this.draggedItem.count; dragEl.appendChild(countSpan); } else { dragEl.style.display = 'none'; }
         }
 
-        const selected = this.inventory[this.selectedSlot]; 
-        const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
+        const selected = this.inventory[this.selectedSlot]; const isTool = (t) => ['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(t);
         
-        // ✨ THE FIX: Safe Group Disposal. We check if geometry exists before disposing.
         const clearWeapon = (parent, name) => {
             const obj = parent.getObjectByName(name);
             if (obj) {
@@ -332,8 +330,14 @@ export class Player {
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(Math.PI / 8, 0, 0); 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), mat); mesh1st.position.set(0, -0.2, -0.1); mesh1st.rotation.set(0, Math.PI / 4, 0); 
-                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); mesh3rd.position.set(0, -0.75, -0.15); mesh3rd.rotation.set(0, Math.PI / 4, 0); 
+                // ✨ FIX: First Person Hand Blocks are now lifted securely into camera view so they are not invisible!
+                mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
+                mesh1st.position.set(0, 0.1, -0.15); 
+                mesh1st.rotation.set(Math.PI/8, Math.PI / 4, 0); 
+                
+                mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
+                mesh3rd.position.set(0, -0.75, -0.15); 
+                mesh3rd.rotation.set(Math.PI/8, Math.PI / 4, 0); 
             }
             mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
             mesh3rd.name = 'equippedItem3rd'; this.armR_3rd.add(mesh3rd);
@@ -398,6 +402,12 @@ export class Player {
 
             if (buttonIdx === 0) { 
                 if (type === 'bedrock') break;
+
+                if (type === 'torch') {
+                    this.world.removeBlock(bx, by, bz); 
+                    if(window.socket) window.socket.emit('requestBlockBreak', { x: bx, y: by, z: bz, type: 'torch' });
+                    break; 
+                }
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
