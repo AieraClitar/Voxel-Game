@@ -42,10 +42,9 @@
         .mc-input { width: clamp(200px, 80vw, 280px); padding: 12px; margin: 10px; background: #000; border: 2px solid #555; border-top-color: #222; border-left-color: #222; color: #fff; font-family: monospace; font-size: clamp(14px, 4vw, 18px); text-align: center; box-sizing: border-box; z-index: 1; outline: none; }
         .mc-input:focus { border-color: #fff; }
 
-        /* ✨ FIX: NEW FLOATING LOBBY POPUP UI FOR MOBILE */
-        #lobby-browser { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,25,0.95); padding: 20px; border: 2px solid var(--accent); border-radius: 12px; width: 85vw; max-width: 450px; max-height: 80vh; overflow-y: auto; z-index: 2000; box-shadow: 0 20px 50px rgba(0,0,0,0.9); backdrop-filter: blur(10px); }
-        #close-lobby { position: absolute; top: 10px; right: 15px; background: transparent; border: none; color: white; font-size: 24px; font-weight: bold; cursor: pointer; transition: color 0.2s; }
-        #close-lobby:active { color: #ff4444; }
+        #lobby-browser, #saved-browser { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,25,0.95); padding: 20px; border: 2px solid var(--accent); border-radius: 12px; width: 85vw; max-width: 450px; max-height: 80vh; overflow-y: auto; z-index: 2000; box-shadow: 0 20px 50px rgba(0,0,0,0.9); backdrop-filter: blur(10px); }
+        .close-popup { position: absolute; top: 10px; right: 15px; background: transparent; border: none; color: white; font-size: 24px; font-weight: bold; cursor: pointer; transition: color 0.2s; }
+        .close-popup:active { color: #ff4444; }
         .server-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #444; background: rgba(255,255,255,0.05); margin-bottom: 5px; border-radius: 5px; }
         .server-item span { font-weight: bold; font-size: clamp(12px, 3vw, 16px); }
         .server-item .mc-btn { width: auto; padding: 5px 15px; margin: 0; font-size: 14px; }
@@ -148,9 +147,8 @@
         <button id="btn-play-menu" class="mc-btn">Host World</button>
         <button id="btn-multiplayer" class="mc-btn">Multiplayer Lobby</button>
         
-        <!-- ✨ THE NEW LOBBY BROWSER POPUP -->
         <div id="lobby-browser">
-            <button id="close-lobby">✖</button>
+            <button class="close-popup" id="close-lobby">✖</button>
             <h3 style="margin-top: 0; color: #FFD700; text-align: center; border-bottom: 2px solid #444; padding-bottom: 10px;">Active Worlds</h3>
             <div id="server-list"></div>
         </div>
@@ -161,7 +159,16 @@
         <h1 class="game-title">Create New World</h1>
         <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
         <button id="btn-create-world" class="mc-btn">Create / Play</button>
+        <!-- ✨ Added Load Saved World Button -->
+        <button id="btn-load-saved" class="mc-btn">Load Saved World</button>
         <button id="btn-back-menu" class="mc-btn">Back</button>
+
+        <!-- ✨ Added Saved Worlds Browser -->
+        <div id="saved-browser">
+            <button class="close-popup" id="close-saved">✖</button>
+            <h3 style="margin-top: 0; color: #FFD700; text-align: center; border-bottom: 2px solid #444; padding-bottom: 10px;">Offline Saved Worlds</h3>
+            <div id="saved-list"></div>
+        </div>
     </div>
 
     <div id="loading-screen" class="menu-screen" style="display: none;">
@@ -224,9 +231,9 @@
     <div id="pause-menu">
         <h1>Game Paused</h1>
         <button class="mc-btn" id="btn-resume">Resume Game</button>
-        <button class="mc-btn" id="btn-save">Save World</button>
-        <button class="mc-btn" id="btn-load">Load World</button>
-        <div id="save-notif">Saved!</div>
+        <!-- ✨ Updated Pause Menu to Save & Exit -->
+        <button class="mc-btn" id="btn-save-exit">Save & Exit</button>
+        <div id="save-notif">Saving...</div>
     </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
