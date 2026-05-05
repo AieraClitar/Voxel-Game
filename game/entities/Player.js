@@ -20,7 +20,7 @@ export class Player {
         this.health = 100; this.maxHealth = 100; this.aiController = null; this.shakeIntensity = 0; this.footstepTimer = 0;
         this.lastNetUpdate = 0;
 
-        this.inventory = [{ type: 'torch', count: 10 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }];
+        this.inventory = [{ type: 'torch', count: 10 }, { type: 'wooden_sword', count: 1 }, { type: 'wooden_pickaxe', count: 1 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }];
         this.mainInventory = Array.from({length: 16}, () => ({type: null, count: 0}));
         this.craftingGrid = Array.from({length: 9}, () => ({type: null, count: 0}));
         this.craftingResult = { type: null, count: 0 }; this.isCraftingTableOpen = false;
@@ -324,11 +324,11 @@ export class Player {
             let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
             let mesh1st, mesh3rd;
 
+            // FIX: Weapons are attached to the palm (Y=0.4), tilted forward.
             if (isTool(selected.type)) {
-                // ✨ FIX: Attach to the palm (Y=0.4), NOT the elbow (Y=-0.3). Tilt forward to counter the arm angle.
                 mesh1st = create3DWeapon(selected.type); 
                 mesh1st.position.set(0, 0.4, -0.1); 
-                mesh1st.rotation.set(Math.PI / 2, 0, 0); 
+                mesh1st.rotation.set(Math.PI / 2.5, 0, 0); 
                 
                 mesh3rd = create3DWeapon(selected.type); 
                 mesh3rd.position.set(0, -0.75, 0); 
@@ -342,7 +342,6 @@ export class Player {
                 mesh3rd.position.set(0, -0.75, -0.15); 
                 mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                // ✨ FIX: Attach blocks to the palm (Y=0.4) so they don't clip into your body
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
                 mesh1st.position.set(0, 0.4, -0.1); 
                 mesh1st.rotation.set(0, Math.PI / 4, 0); 
@@ -433,10 +432,20 @@ export class Player {
                 if (type === 'crafting_table') { this.isCraftingTableOpen = true; this.toggleInventory(); break; }
                 const selected = this.inventory[this.selectedSlot];
                 if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
-                    if (selected.type === 'torch' && type === 'leaves') break; if (type === 'torch') break; 
+                    
+                    // FIX: Strict torch placement logic
+                    if (selected.type === 'torch') {
+                        if (type === 'leaves' || type === 'air' || type === 'water' || type === 'lava' || type === 'torch') break; 
+                    }
+
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
+                    // Do not allow placing blocks inside the player
+                    if (nx === Math.floor(this.camera.position.x) && nz === Math.floor(this.camera.position.z)) {
+                        if (ny === Math.floor(this.camera.position.y) || ny === Math.floor(this.camera.position.y - 1)) break;
+                    }
+
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
                     
@@ -452,18 +461,41 @@ export class Player {
     checkCollision(x, y, z) {
         const radius = 0.25; const feetY = y - 1.5; const headY = y + 0.2;
         const pMinX = Math.floor(x - radius + 0.5); const pMaxX = Math.floor(x + radius + 0.5); const pMinY = Math.floor(feetY + 0.5); const pMaxY = Math.floor(headY + 0.5); const pMinZ = Math.floor(z - radius + 0.5); const pMaxZ = Math.floor(z + radius + 0.5);
-        for (let bx = pMinX; bx <= pMaxX; bx++) { for (let by = pMinY; by <= pMaxY; by++) { for (let bz = pMinZ; bz <= pMaxZ; bz++) { const type = this.world.getBlockType(bx, by, bz); if (type !== 'air' && type !== 'water' && type !== 'torch') { if (feetY < by + 0.5 && headY > by - 0.5) return true; } } } }
+        for (let bx = pMinX; bx <= pMaxX; bx++) { 
+            for (let by = pMinY; by <= pMaxY; by++) { 
+                for (let bz = pMinZ; bz <= pMaxZ; bz++) { 
+                    const type = this.world.getBlockType(bx, by, bz); 
+                    if (type !== 'air' && type !== 'water' && type !== 'lava' && type !== 'torch') { 
+                        if (feetY < by + 0.5 && headY > by - 0.5) return true; 
+                    } 
+                } 
+            } 
+        }
         return false;
     }
 
     update(delta) {
         if (!this.gameActive) return;
 
-        let targetX, targetZ;
-        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * this.speed; targetZ = -this.joyMove.y * this.speed; } 
-        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * this.speed; targetZ = this._input.z * this.speed; }
+        // PHYSICS FIX: Liquid and Ice detection
+        const blockAtFeet = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.5), Math.floor(this.camera.position.z));
+        const blockAtHead = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
+        const blockBelow = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z));
         
-        this.velocity.x += (targetX - this.velocity.x) * 10 * delta; this.velocity.z += (targetZ - this.velocity.z) * 10 * delta;
+        let inLiquid = (blockAtFeet === 'water' || blockAtFeet === 'lava' || blockAtHead === 'water' || blockAtHead === 'lava');
+        let onIce = (blockBelow === 'ice');
+        
+        let targetX, targetZ;
+        let currentSpeed = this.speed;
+        if (inLiquid) currentSpeed *= 0.5;
+
+        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * currentSpeed; targetZ = -this.joyMove.y * currentSpeed; } 
+        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * currentSpeed; targetZ = this._input.z * currentSpeed; }
+        
+        let friction = onIce ? 2.0 : 10.0;
+        this.velocity.x += (targetX - this.velocity.x) * friction * delta; 
+        this.velocity.z += (targetZ - this.velocity.z) * friction * delta;
+
         this._direction.set(1, 0, 0).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
         let dxRight = this._direction.x * this.velocity.x * delta; let dzRight = this._direction.z * this.velocity.x * delta;
         this._direction.set(0, 0, -1).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
@@ -472,7 +504,17 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        this.velocity.y -= this.gravity * delta; const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
+        // PHYSICS FIX: Liquid Buoyancy vs Gravity
+        if (inLiquid) {
+            this.velocity.y -= (this.gravity * 0.15) * delta; 
+            if (this.moveForward || this.canJump || (this.isMobile && this.joyMove.y > 0.5)) {
+                this.velocity.y += 12.0 * delta; 
+            }
+        } else {
+            this.velocity.y -= this.gravity * delta; 
+        }
+
+        const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
         for (let i = 0; i < ySteps; i++) {
             this.camera.position.y += yStepAmt;
             if (this.velocity.y < 0) { if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { let highestBlockY = Math.floor(this.camera.position.y - 1.5 + 0.5); this.camera.position.y = highestBlockY + 0.5 + 1.5; this.velocity.y = 0; this.canJump = true; break; } else { this.canJump = false; } } 
@@ -503,10 +545,29 @@ export class Player {
 
         let pitch = this._euler.x; this.head.rotation.x = pitch; let targetFPSArmX = -Math.PI / 4;
 
+        // DISTINCT ANIMATIONS
+        let tool = this.inventory[this.selectedSlot].type || '';
         if (this.attackAnimTimer > 0) {
-            this.attackAnimTimer -= delta; let strike = Math.sin((1.0 - (this.attackAnimTimer / 0.25)) * Math.PI) * 1.5;
-            targetFPSArmX = -Math.PI / 4 + strike; targetArmRX = pitch + strike; 
+            this.attackAnimTimer -= delta; 
+            let strike = Math.sin((1.0 - (this.attackAnimTimer / 0.25)) * Math.PI) * 1.5;
+            
+            if (tool.includes('sword')) {
+                // Horizontal slash
+                targetFPSArmX = -Math.PI / 4;
+                this.arm.rotation.z = -strike;
+                targetArmRX = pitch + strike * 0.5;
+            } else if (tool === 'gun' || tool === 'crossbow') {
+                // Recoil
+                targetFPSArmX = -Math.PI / 4 + (strike * 0.2);
+                targetArmRX = pitch + (strike * 0.2); 
+            } else {
+                // Downward chop
+                targetFPSArmX = -Math.PI / 4 + strike; 
+                this.arm.rotation.z = 0;
+                targetArmRX = pitch + strike; 
+            }
         } else if (this.isMining) {
+            this.arm.rotation.z = 0;
             let mine = Math.abs(Math.sin(performance.now() * 0.015)) * 0.5; targetFPSArmX = -Math.PI / 4 + mine; targetArmRX = pitch + mine;
             this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera); let rayTargets = []; for (const chunkGroup of this.world.chunks.values()) rayTargets.push(chunkGroup);
             const intersects = this.raycaster.intersectObjects(rayTargets, true);
@@ -530,6 +591,8 @@ export class Player {
                 break;
             }
             if (!stillLookingAtTarget) this.stopMining();
+        } else {
+            this.arm.rotation.z = 0;
         }
 
         this.arm.rotation.x = THREE.MathUtils.lerp(this.arm.rotation.x, targetFPSArmX, 15 * delta); this.armR_3rd.rotation.x = THREE.MathUtils.lerp(this.armR_3rd.rotation.x, targetArmRX, 15 * delta); this.armL.rotation.x = THREE.MathUtils.lerp(this.armL.rotation.x, targetArmLX, 15 * delta); this.legR.rotation.x = THREE.MathUtils.lerp(this.legR.rotation.x, targetLegRX, 15 * delta); this.legL.rotation.x = THREE.MathUtils.lerp(this.legL.rotation.x, targetLegLX, 15 * delta);

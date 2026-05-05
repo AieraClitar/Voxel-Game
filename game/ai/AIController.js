@@ -51,7 +51,7 @@ export class AIController {
         this.scene = scene; this.world = world; this.player = player;
         this.mobs = new Map(); 
         
-        this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
+        this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x2E7D32}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
         this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); 
@@ -76,13 +76,14 @@ export class AIController {
         const armL = new THREE.Group(); armL.position.set(-0.425, 1.5, 0); const armLMesh = new THREE.Mesh(this.geoLimb, matSkin); armLMesh.position.y = -0.375; armLMesh.castShadow = true; armL.add(armLMesh);
         const armR = new THREE.Group(); armR.position.set(0.425, 1.5, 0); const armRMesh = new THREE.Mesh(this.geoLimb, matSkin); armRMesh.position.y = -0.375; armRMesh.castShadow = true; armR.add(armRMesh);
 
+        // ANIMATION FIX: Attach weapons exactly at the hand and point them correctly
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
-            weaponMesh.position.set(0, -0.75, 0); 
-            if (weaponType.includes('sword') || weaponType.includes('axe') || weaponType.includes('pickaxe')) {
-                weaponMesh.rotation.set(Math.PI, -Math.PI / 2, 0);
+            weaponMesh.position.set(0, -0.75, 0); // Position exactly at the bottom of the arm
+            if (weaponType.includes('sword') || weaponType.includes('axe') || weaponType.includes('pickaxe') || weaponType.includes('shovel')) {
+                weaponMesh.rotation.set(Math.PI / 2, 0, 0); // Point forward/up
             } else {
-                weaponMesh.rotation.set(Math.PI / 2, 0, 0); 
+                weaponMesh.rotation.set(Math.PI / 2, 0, 0); // Point forward for bows/guns
             }
             weaponMesh.castShadow = true; armR.add(weaponMesh);
         }
@@ -134,9 +135,11 @@ export class AIController {
             projGroup.add(shaft, tip, fletch);
         }
         
-        projGroup.position.set(fromPos.x, fromPos.y, fromPos.z); this.scene.add(projGroup);
-        let distToPlayer = fromPos.distanceTo(this.player.camera.position);
+        // Spawn slightly forward to prevent instant self-clipping
+        projGroup.position.set(fromPos.x, fromPos.y, fromPos.z); 
+        this.scene.add(projGroup);
         
+        let distToPlayer = fromPos.distanceTo(this.player.camera.position);
         if (type === 'gun') { if(AudioSys.shootGun) AudioSys.shootGun(distToPlayer); }
         else if (type === 'crossbow') { if(AudioSys.shootCrossbow) AudioSys.shootCrossbow(distToPlayer); }
         else { if(AudioSys.shootBow) AudioSys.shootBow(distToPlayer); }
@@ -155,7 +158,7 @@ export class AIController {
 
             let dx = projGroup.position.x - this.player.camera.position.x; let dz = projGroup.position.z - this.player.camera.position.z; let dy = projGroup.position.y - this.player.camera.position.y;
             
-            // ✨ THE FIX: Massive collision radius specifically designed to catch arrows flying past you between frames.
+            // Generous player collision radius specifically designed to catch arrows flying past you
             if (Math.sqrt(dx*dx + dz*dz) < 1.8 && dy < 1.8 && dy > -2.0) {
                  if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: type==='gun'?35:type==='crossbow'?25:15, source: type });
                  this.scene.remove(projGroup); clearInterval(projInterval);
@@ -187,24 +190,44 @@ export class AIController {
             
             let targetArmLX = 0, targetArmRX = 0, targetLegLX = 0, targetLegRX = 0, targetBodyRotX = 0;
 
-            if (mob.isMoving) {
-                mob.swingTime += delta * 15; let swing = Math.sin(mob.swingTime) * 0.6;
-                targetLegLX = swing; targetLegRX = -swing; targetArmRX = swing; targetArmLX = -swing;
+            // ANIMATION FIX: Zombies hold arms forward, Archers hold weapons properly
+            if (mob.type === 'zombie') {
+                targetArmRX = -Math.PI / 2;
+                targetArmLX = -Math.PI / 2;
+                if (mob.isMoving) {
+                    mob.swingTime += delta * 15;
+                    let swing = Math.sin(mob.swingTime) * 0.6;
+                    targetLegLX = swing; targetLegRX = -swing;
+                    targetArmRX += swing * 0.1; // Small bob instead of full swing
+                    targetArmLX -= swing * 0.1;
+                }
+            } else if (mob.type === 'archer') {
+                if (mob.isMoving && mob.attackAnimTimer <= 0) {
+                    mob.swingTime += delta * 15;
+                    let swing = Math.sin(mob.swingTime) * 0.6;
+                    targetLegLX = swing; targetLegRX = -swing;
+                    targetArmRX = swing; targetArmLX = -swing;
+                } else {
+                    // Aiming stance
+                    if (mob.weaponType === 'gun') { targetArmRX = -Math.PI / 2; targetArmLX = -Math.PI / 3; }
+                    else { targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; }
+                }
             }
+
             if (mob.hitFlinch > 0) { mob.hitFlinch -= delta * 3; targetBodyRotX = -0.5 * mob.hitFlinch; }
 
-            if (mob.type === 'archer' && mob.attackAnimTimer <= 0 && !mob.isMoving) { 
-                if(mob.weaponType === 'gun') { targetArmRX = -Math.PI / 2; targetArmLX = -Math.PI / 3; }
-                else { targetArmRX = -Math.PI / 2.2; targetArmLX = -Math.PI / 2.2; }
-            }
-            
+            // SMOOTH ATTACK ANIMATION
             if (mob.attackAnimTimer > 0) {
                 mob.attackAnimTimer -= delta;
                 let strike = Math.sin((mob.attackAnimTimer / (mob.type === 'archer' ? 0.5 : 0.3)) * Math.PI) * 1.5;
-                if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.1; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; 
+                if (mob.type === 'archer') { 
+                    targetArmRX -= strike * 0.2; // Small recoil
+                } else { 
+                    targetArmRX -= strike; // Heavy melee swing
+                } 
             }
             
-            // ✨ THE FIX: We make the fire effect slightly larger and guarantee it spawns.
+            // LAVA/SUN BURNING
             if (mob.isBurning && Math.random() < 0.4) {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), this.fireMat);
                 f.position.set(mob.mesh.position.x + (Math.random()-0.5)*0.6, mob.mesh.position.y + 0.5 + Math.random()*1.5, mob.mesh.position.z + (Math.random()-0.5)*0.6);

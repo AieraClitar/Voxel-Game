@@ -2,11 +2,16 @@ import * as THREE from 'three';
 import { SimpleNoise } from '../utils/Noise.js';
 import { Textures } from '../utils/Textures.js';
 
-const CHUNK_SIZE = 16; const CHUNK_HEIGHT = 128; const Y_OFFSET = 30; const RENDER_DISTANCE = 3; const WATER_LEVEL = 5;
+const CHUNK_SIZE = 16; 
+const CHUNK_HEIGHT = 128; 
+const Y_OFFSET = 30; 
+const RENDER_DISTANCE = 3; 
+const WATER_LEVEL = 5;
 
+// Added 'lava' to block types
 const BLOCK_TYPES = {
     'air': 0, 'bedrock': 1, 'stone': 2, 'dirt': 3, 'grass': 4, 'sand': 5, 'snow': 6, 'ice': 7, 'water': 8, 'oak_wood': 9,
-    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16
+    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16, 'lava': 17
 };
 const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
@@ -28,18 +33,27 @@ export class World {
         const toolMat = (texName) => new THREE.MeshLambertMaterial({ map: Textures.generate(texName), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
 
         this.materials = {
-            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
+            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 
+            2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 
+            3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
             4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
-            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }), 
+            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 
+            6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 
+            7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8, depthWrite: false }), // Smooth Ice
+            8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7, depthWrite: false }), // SEAMLESS WATER: depthWrite false removes inner cube faces
             9: [ new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }) ],
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
-            11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
+            11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 
+            12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
             13: [ new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }) ],
-            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') })
+            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 
+            15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 
+            16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') }),
+            17: new THREE.MeshBasicMaterial({ map: Textures.generate('lava'), color: 0xffffff }) // LAVA: BasicMaterial makes it glow naturally
         };
 
         this.itemMaterials = {
-            stone: this.materials[2], dirt: this.materials[3], grass: this.materials[4], sand: this.materials[5], snow: this.materials[6], ice: this.materials[7], oak_wood: this.materials[9], birch_wood: this.materials[10], leaves: this.materials[11], oak_planks: this.materials[12], birch_planks: this.materials[16], crafting_table: this.materials[13], cactus: this.materials[14], torch: this.materials[15],
+            stone: this.materials[2], dirt: this.materials[3], grass: this.materials[4], sand: this.materials[5], snow: this.materials[6], ice: this.materials[7], oak_wood: this.materials[9], birch_wood: this.materials[10], leaves: this.materials[11], oak_planks: this.materials[12], birch_planks: this.materials[16], crafting_table: this.materials[13], cactus: this.materials[14], torch: this.materials[15], lava: this.materials[17], water: this.materials[8],
             stick: toolMat('stick'), wooden_sword: toolMat('wooden_sword'), stone_sword: toolMat('stone_sword'), wooden_pickaxe: toolMat('wooden_pickaxe'), stone_pickaxe: toolMat('stone_pickaxe'), wooden_axe: toolMat('wooden_axe'), stone_axe: toolMat('stone_axe'), wooden_shovel: toolMat('wooden_shovel'), stone_shovel: toolMat('stone_shovel'), bow: toolMat('bow'), crossbow: toolMat('crossbow'), gun: toolMat('gun')
         };
     }
@@ -47,9 +61,9 @@ export class World {
     getChunkKey(cx, cz) { return `${cx},${cz}`; }
     getBlockIndex(lx, ly, lz) { if(lx < 0 || lx > 15 || ly < 0 || ly > 127 || lz < 0 || lz > 15) return -1; return (lx * CHUNK_SIZE * CHUNK_HEIGHT) + (lz * CHUNK_HEIGHT) + ly; }
     getSurfaceHeight(x, z) { for (let y = 60; y >= -30; y--) { if (this.hasBlock(x, y, z)) return y; } return 5; }
-    hasRoof(x, y, z) { for(let i = Math.round(y) + 1; i <= Math.round(y) + 30; i++) { const type = this.getBlockType(Math.round(x), i, Math.round(z)); if(type !== 'air' && type !== 'water' && type !== 'torch') return true; } return false; }
+    hasRoof(x, y, z) { for(let i = Math.round(y) + 1; i <= Math.round(y) + 30; i++) { const type = this.getBlockType(Math.round(x), i, Math.round(z)); if(type !== 'air' && type !== 'water' && type !== 'lava' && type !== 'torch') return true; } return false; }
     getBlockType(x, y, z) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return 'air'; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const data = this.chunkData.get(this.getChunkKey(cx, cz)); if (!data) return 'air'; const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx === -1) return 'air'; return ID_TO_TYPE[data[idx]]; }
-    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water'; }
+    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water' && type !== 'lava'; }
     setBlockData(x, y, z, typeId) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const cKey = this.getChunkKey(cx, cz); let data = this.chunkData.get(cKey); if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); } const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx !== -1) data[idx] = typeId; }
 
     addBlock(x, y, z, typeStr, normal = null, force = false) {
@@ -70,7 +84,7 @@ export class World {
     }
 
     spawnParticles(x, y, z, type, isBlood = false) {
-        if (!type || type === 'air') return;
+        if (!type || type === 'air' || type === 'water' || type === 'lava') return;
         const count = isBlood ? 8 : 12; const color = isBlood ? 0xcc0000 : (type.includes('leaves') ? 0x2d5a27 : (type.includes('wood') || type.includes('planks') ? 0x5c4033 : 0x888888));
         const mat = new THREE.MeshBasicMaterial({ color: color });
         for (let i = 0; i < count; i++) {
@@ -118,18 +132,19 @@ export class World {
                     if (y === -30) typeId = 1; 
                     else if (y <= height) { let n1 = this.roughMap.getNoise(wx * 0.04, y * 0.04 + wz * 0.01); let n2 = this.humidMap.getNoise(wz * 0.04, y * 0.04 + wx * 0.01); if (Math.abs(n1) < 0.12 && Math.abs(n2) < 0.12) isCave = true; }
                     
-                    if (!isCave) {
-                        // ✨ THE FIX: Tundra lakes are filled with WATER (8), with ICE (7) only on the top block!
+                    if (isCave) {
+                        // LAVA GENERATION
+                        if (y < -20 && Math.random() < 0.05) typeId = 17;
+                        else typeId = 0; // air
+                    }
+                    
+                    if (!isCave || typeId === 17) {
                         if (y > height && y <= WATER_LEVEL) {
                             typeId = (biome === 'tundra' && y === WATER_LEVEL) ? 7 : 8; 
                         } 
-                        // ✨ THE FIX: The bottom of lakes are Dirt (3), not Snow.
                         else if (y === height) { 
-                            if (height < WATER_LEVEL) {
-                                typeId = 3; 
-                            } else {
-                                if (biome === 'desert') typeId = 5; else if (biome === 'tundra') typeId = 6; else typeId = height <= WATER_LEVEL + 1 ? 5 : 4; 
-                            }
+                            if (height < WATER_LEVEL) { typeId = 3; } 
+                            else { if (biome === 'desert') typeId = 5; else if (biome === 'tundra') typeId = 6; else typeId = height <= WATER_LEVEL + 1 ? 5 : 4; }
                         } 
                         else if (y > height - 3 && y !== -30) typeId = biome === 'desert' ? 5 : 3; 
                         
@@ -179,11 +194,10 @@ export class World {
         const data = this.chunkData.get(cKey); if (!data) return;
 
         const chunkGroup = new THREE.Group(); chunkGroup.userData.isChunk = true;
-        const instances = {}; for(let i = 1; i <= 16; i++) instances[i] = []; 
+        const instances = {}; for(let i = 1; i <= Object.keys(this.materials).length; i++) instances[i] = []; 
         const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE; const matrix = new THREE.Matrix4();
         
-        // ✨ THE FIX: Ice (7) is added here so blocks below it don't turn invisible to create the void bug
-        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15;
+        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15 && id !== 17; // Updated to include lava (17)
 
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -206,9 +220,12 @@ export class World {
             }
         }
 
-        for (let i = 1; i <= 16; i++) {
-            if (instances[i].length === 0) continue;
-            const geo = (i === 15) ? this.geoTorch : this.geoBlock; const mat = this.materials[i]; const iMesh = new THREE.InstancedMesh(geo, mat, instances[i].length); iMesh.castShadow = true; iMesh.receiveShadow = true; 
+        for (let i = 1; i <= Object.keys(this.materials).length; i++) {
+            if (!instances[i] || instances[i].length === 0) continue;
+            const geo = (i === 15) ? this.geoTorch : this.geoBlock; const mat = this.materials[i]; 
+            const iMesh = new THREE.InstancedMesh(geo, mat, instances[i].length); 
+            iMesh.castShadow = (i !== 8 && i !== 17); // Water and Lava don't cast shadows
+            iMesh.receiveShadow = true; 
             iMesh.userData.positions = []; iMesh.userData.isTerrain = true;
             for (let j = 0; j < instances[i].length; j++) { iMesh.setMatrixAt(j, instances[i][j].matrix); iMesh.userData.positions.push({ x: instances[i][j].x, y: instances[i][j].y, z: instances[i][j].z }); }
             chunkGroup.add(iMesh);
@@ -254,7 +271,7 @@ export class World {
     }
 
     spawnNetworkedDrop(id, x, y, z, typeStr) {
-        if (typeStr === 'air' || typeStr === 'water' || this.drops.some(d => d.id === id)) return;
+        if (typeStr === 'air' || typeStr === 'water' || typeStr === 'lava' || this.drops.some(d => d.id === id)) return;
         const geo = typeStr === 'torch' ? this.dropGeoTorch : this.dropGeoBlock;
         const mesh = new THREE.Mesh(geo, this.itemMaterials[typeStr] || this.itemMaterials['stone']);
         mesh.position.set(x + (Math.random()-0.5)*0.2, y, z + (Math.random()-0.5)*0.2);
@@ -270,9 +287,24 @@ export class World {
     updateDrops(delta) {
         for (let drop of this.drops) {
             if (drop.pickupDelay > 0) drop.pickupDelay -= delta; 
-            drop.mesh.rotation.y += delta * 2; drop.velocityY -= 20.0 * delta; 
+            drop.mesh.rotation.y += delta * 2; 
+            
             let nextY = drop.mesh.position.y + (drop.velocityY * delta);
-            if (this.hasBlock(Math.round(drop.mesh.position.x), Math.round(nextY - 0.65), Math.round(drop.mesh.position.z))) { drop.velocityY = 0; drop.mesh.position.y = Math.round(nextY - 0.65) + 0.65; } else { drop.mesh.position.y = nextY; }
+            let blockType = this.getBlockType(Math.round(drop.mesh.position.x), Math.round(nextY - 0.65), Math.round(drop.mesh.position.z));
+            
+            // PHYSICS: Water & Lava Drag/Buoyancy
+            if (blockType === 'water' || blockType === 'lava') {
+                drop.velocityY *= 0.8; // Drag
+                drop.velocityY += 2.0 * delta; // Float upwards
+                drop.mesh.position.y = nextY;
+            } else {
+                drop.velocityY -= 20.0 * delta; // Gravity
+                if (this.hasBlock(Math.round(drop.mesh.position.x), Math.round(nextY - 0.65), Math.round(drop.mesh.position.z))) { 
+                    drop.velocityY = 0; drop.mesh.position.y = Math.round(nextY - 0.65) + 0.65; 
+                } else { 
+                    drop.mesh.position.y = nextY; 
+                }
+            }
         }
 
         for (let i = this.particles.length - 1; i >= 0; i--) {
