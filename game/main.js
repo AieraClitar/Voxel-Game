@@ -63,6 +63,7 @@ if (window.io) {
         sprite.scale.set(2, 0.5, 1); sprite.position.y = 2.0; return sprite;
     }
 
+    // RED TREE FIX: Deep clone materials before attaching them to a network player
     function updateNetworkPlayerItem(group, itemType) {
         if (group.userData.heldItemType === itemType) return;
         group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); if (oldItem) armR.remove(oldItem);
@@ -71,7 +72,9 @@ if (window.io) {
             if (['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick', 'bow', 'crossbow', 'gun'].includes(itemType)) {
                 mesh = create3DWeapon(itemType); mesh.position.set(0, -0.75, 0); mesh.rotation.set(Math.PI / 2, 0, 0);
             } else {
-                const mat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
+                const baseMat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
+                const mat = Array.isArray(baseMat) ? baseMat.map(m => m.clone()) : baseMat.clone();
+                
                 if (itemType === 'torch') {
                     mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
                 } else {
@@ -479,7 +482,6 @@ function animate() {
     const selectedItem = player.inventory[player.selectedSlot]; handLight.intensity = (selectedItem && selectedItem.type === 'torch' && selectedItem.count > 0) ? 10 + (Math.random() * 2) : 0;
     if (handLight.intensity > 0) handLight.position.copy(player.camera.position);
 
-    // ENVIRONMENTAL PHYSICS SOUNDS/DAMAGE
     const headBlock = world.getBlockType(Math.floor(px), Math.floor(player.camera.position.y), Math.floor(pz));
     const feetBlock = world.getBlockType(Math.floor(px), Math.floor(player.camera.position.y - 1.5), Math.floor(pz));
     if (performance.now() - lastLiquidTime > 1000) {

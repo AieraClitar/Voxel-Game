@@ -108,7 +108,8 @@ export class Player {
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
-            this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
+            // VOID FALL FIX: Drop from sky instead of querying ungenerated surface height
+            this.camera.position.set(16, 120, 16); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
         }
     }
@@ -324,7 +325,6 @@ export class Player {
             let mat = this.world.itemMaterials[selected.type] || this.world.itemMaterials['stone'];
             let mesh1st, mesh3rd;
 
-            // FIX: Weapons are attached to the palm (Y=0.4), tilted forward.
             if (isTool(selected.type)) {
                 mesh1st = create3DWeapon(selected.type); 
                 mesh1st.position.set(0, 0.4, -0.1); 
@@ -389,10 +389,17 @@ export class Player {
         if (this.aiController) { for (const mob of this.aiController.mobs.values()) rayTargets.push(mob.mesh); }
         const intersects = this.raycaster.intersectObjects(rayTargets, true);
 
+        // WATER MINING FIX: Explicitly ignore liquids in the raycast
+        let validIntersect = null;
         for (let intersect of intersects) {
+            if (intersect.distance > 6.0) break;
+            
             let bx, by, bz;
-            if (intersect.object.isInstancedMesh) { const pos = intersect.object.userData.positions[intersect.instanceId]; if (!pos) continue; bx = pos.x; by = pos.y; bz = pos.z; } 
-            else if (intersect.object.userData && intersect.object.userData.isMob) {
+            if (intersect.object.isInstancedMesh) { 
+                const pos = intersect.object.userData.positions[intersect.instanceId]; 
+                if (!pos) continue; 
+                bx = pos.x; by = pos.y; bz = pos.z; 
+            } else if (intersect.object.userData && intersect.object.userData.isMob) {
                 if (intersect.distance > 3.0 && tool !== 'gun' && tool !== 'bow' && tool !== 'crossbow') continue; 
                 if (buttonIdx === 0) { 
                     let hitMob = intersect.object.userData.mobRef; let dmg = 5; 
@@ -406,52 +413,58 @@ export class Player {
                     this.shakeIntensity = 0.3; 
                 }
                 return; 
-            } else { continue; }
+            } else { 
+                continue; 
+            }
 
-            if (intersect.distance > 6.0) break;
             const type = this.world.getBlockType(bx, by, bz);
+            
+            if (type === 'water' || type === 'lava') continue;
 
-            if (buttonIdx === 0) { 
-                if (type === 'bedrock') break;
+            validIntersect = { intersect, bx, by, bz, type };
+            break;
+        }
 
-                this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
-                let speedMult = 1.0;
-                if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
-                if (tool === 'wooden_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 3.0;
-                if (tool === 'stone_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 6.0;
-                if (tool === 'wooden_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 3.0;
-                if (tool === 'stone_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 6.0;
+        if (!validIntersect) return;
+        const { intersect, bx, by, bz, type } = validIntersect;
 
-                if (type === 'stone') this.miningDurability = 1.5 / speedMult; 
-                else if (type.includes('wood') || type.includes('planks') || type === 'crafting_table') this.miningDurability = 1.0 / speedMult;
-                else if (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow') this.miningDurability = 0.5 / speedMult;
-                else if (type === 'leaves') this.miningDurability = 0.2; else this.miningDurability = 0.5; 
+        if (buttonIdx === 0) { 
+            if (type === 'bedrock') return;
+
+            this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
+            let speedMult = 1.0;
+            if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
+            if (tool === 'wooden_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 3.0;
+            if (tool === 'stone_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 6.0;
+            if (tool === 'wooden_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 3.0;
+            if (tool === 'stone_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 6.0;
+
+            if (type === 'stone') this.miningDurability = 1.5 / speedMult; 
+            else if (type.includes('wood') || type.includes('planks') || type === 'crafting_table') this.miningDurability = 1.0 / speedMult;
+            else if (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow') this.miningDurability = 0.5 / speedMult;
+            else if (type === 'leaves') this.miningDurability = 0.2; else this.miningDurability = 0.5; 
+            
+            document.getElementById('mining-ui').style.display = 'block'; 
+        } else if (buttonIdx === 2) { 
+            if (type === 'crafting_table') { this.isCraftingTableOpen = true; this.toggleInventory(); return; }
+            const selected = this.inventory[this.selectedSlot];
+            if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
                 
-                document.getElementById('mining-ui').style.display = 'block'; break;
-            } else if (buttonIdx === 2) { 
-                if (type === 'crafting_table') { this.isCraftingTableOpen = true; this.toggleInventory(); break; }
-                const selected = this.inventory[this.selectedSlot];
-                if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
-                    
-                    // FIX: Strict torch placement logic
-                    if (selected.type === 'torch') {
-                        if (type === 'leaves' || type === 'air' || type === 'water' || type === 'lava' || type === 'torch') break; 
-                    }
-
-                    const normal = intersect.face.normal.clone();
-                    let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
-                    
-                    // Do not allow placing blocks inside the player
-                    if (nx === Math.floor(this.camera.position.x) && nz === Math.floor(this.camera.position.z)) {
-                        if (ny === Math.floor(this.camera.position.y) || ny === Math.floor(this.camera.position.y - 1)) break;
-                    }
-
-                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
-                    if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
-                    
-                    selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
+                if (selected.type === 'torch') {
+                    if (type === 'leaves' || type === 'air' || type === 'water' || type === 'lava' || type === 'torch') return; 
                 }
-                break;
+
+                const normal = intersect.face.normal.clone();
+                let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
+                
+                if (nx === Math.floor(this.camera.position.x) && nz === Math.floor(this.camera.position.z)) {
+                    if (ny === Math.floor(this.camera.position.y) || ny === Math.floor(this.camera.position.y - 1)) return;
+                }
+
+                this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
+                if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                
+                selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
             }
         }
     }
@@ -477,7 +490,14 @@ export class Player {
     update(delta) {
         if (!this.gameActive) return;
 
-        // PHYSICS FIX: Liquid and Ice detection
+        // VOID FALL FIX: Suspend gravity if the chunk isn't loaded
+        const currentChunkX = Math.floor(this.camera.position.x / 16);
+        const currentChunkZ = Math.floor(this.camera.position.z / 16);
+        if (!this.world.chunkMeshState.has(`${currentChunkX},${currentChunkZ}`)) {
+            this.velocity.y = 0; 
+            return; 
+        }
+
         const blockAtFeet = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.5), Math.floor(this.camera.position.z));
         const blockAtHead = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
         const blockBelow = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z));
@@ -504,7 +524,6 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        // PHYSICS FIX: Liquid Buoyancy vs Gravity
         if (inLiquid) {
             this.velocity.y -= (this.gravity * 0.15) * delta; 
             if (this.moveForward || this.canJump || (this.isMobile && this.joyMove.y > 0.5)) {
@@ -524,11 +543,24 @@ export class Player {
         const horizSpeed = Math.sqrt(this.velocity.x**2 + this.velocity.z**2);
         if (this.canJump && horizSpeed > 1) { this.footstepTimer += delta; if (this.footstepTimer > 0.35) { let floorType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z)); if(floorType === 'stone' || floorType === 'bedrock') { if(AudioSys && AudioSys.stepStone) AudioSys.stepStone(); } else { if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass(); } this.footstepTimer = 0; } }
 
+        // PHANTOM DROP FIX: Check inventory capacity before picking up items
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
-                if(window.socket && !drop.isBeingPickedUp) {
-                    drop.isBeingPickedUp = true; drop.mesh.visible = false; window.socket.emit('requestPickup', drop.id);
+                if (window.socket && !drop.isBeingPickedUp) {
+                    let hasSpace = false;
+                    const limit = this.getStackLimit(drop.type);
+                    for (let invSlot of [...this.inventory, ...this.mainInventory]) {
+                        if ((invSlot.type === drop.type && invSlot.count < limit) || invSlot.count === 0) {
+                            hasSpace = true; break;
+                        }
+                    }
+
+                    if (hasSpace) {
+                        drop.isBeingPickedUp = true; 
+                        drop.mesh.visible = false; 
+                        window.socket.emit('requestPickup', drop.id);
+                    }
                 }
             }
         }
@@ -545,23 +577,19 @@ export class Player {
 
         let pitch = this._euler.x; this.head.rotation.x = pitch; let targetFPSArmX = -Math.PI / 4;
 
-        // DISTINCT ANIMATIONS
         let tool = this.inventory[this.selectedSlot].type || '';
         if (this.attackAnimTimer > 0) {
             this.attackAnimTimer -= delta; 
             let strike = Math.sin((1.0 - (this.attackAnimTimer / 0.25)) * Math.PI) * 1.5;
             
             if (tool.includes('sword')) {
-                // Horizontal slash
                 targetFPSArmX = -Math.PI / 4;
                 this.arm.rotation.z = -strike;
                 targetArmRX = pitch + strike * 0.5;
             } else if (tool === 'gun' || tool === 'crossbow') {
-                // Recoil
                 targetFPSArmX = -Math.PI / 4 + (strike * 0.2);
                 targetArmRX = pitch + (strike * 0.2); 
             } else {
-                // Downward chop
                 targetFPSArmX = -Math.PI / 4 + strike; 
                 this.arm.rotation.z = 0;
                 targetArmRX = pitch + strike; 

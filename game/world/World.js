@@ -8,7 +8,6 @@ const Y_OFFSET = 30;
 const RENDER_DISTANCE = 3; 
 const WATER_LEVEL = 5;
 
-// Added 'lava' to block types
 const BLOCK_TYPES = {
     'air': 0, 'bedrock': 1, 'stone': 2, 'dirt': 3, 'grass': 4, 'sand': 5, 'snow': 6, 'ice': 7, 'water': 8, 'oak_wood': 9,
     'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16, 'lava': 17
@@ -39,8 +38,8 @@ export class World {
             4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
             5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 
             6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 
-            7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8, depthWrite: false }), // Smooth Ice
-            8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7, depthWrite: false }), // SEAMLESS WATER: depthWrite false removes inner cube faces
+            7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8, depthWrite: false }), 
+            8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7, depthWrite: false }), 
             9: [ new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }) ],
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
             11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 
@@ -49,7 +48,7 @@ export class World {
             14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 
             15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 
             16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') }),
-            17: new THREE.MeshBasicMaterial({ map: Textures.generate('lava'), color: 0xffffff }) // LAVA: BasicMaterial makes it glow naturally
+            17: new THREE.MeshBasicMaterial({ map: Textures.generate('lava'), color: 0xffffff }) 
         };
 
         this.itemMaterials = {
@@ -133,9 +132,8 @@ export class World {
                     else if (y <= height) { let n1 = this.roughMap.getNoise(wx * 0.04, y * 0.04 + wz * 0.01); let n2 = this.humidMap.getNoise(wz * 0.04, y * 0.04 + wx * 0.01); if (Math.abs(n1) < 0.12 && Math.abs(n2) < 0.12) isCave = true; }
                     
                     if (isCave) {
-                        // LAVA GENERATION
                         if (y < -20 && Math.random() < 0.05) typeId = 17;
-                        else typeId = 0; // air
+                        else typeId = 0; 
                     }
                     
                     if (!isCave || typeId === 17) {
@@ -197,7 +195,7 @@ export class World {
         const instances = {}; for(let i = 1; i <= Object.keys(this.materials).length; i++) instances[i] = []; 
         const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE; const matrix = new THREE.Matrix4();
         
-        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15 && id !== 17; // Updated to include lava (17)
+        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15 && id !== 17;
 
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -224,7 +222,10 @@ export class World {
             if (!instances[i] || instances[i].length === 0) continue;
             const geo = (i === 15) ? this.geoTorch : this.geoBlock; const mat = this.materials[i]; 
             const iMesh = new THREE.InstancedMesh(geo, mat, instances[i].length); 
-            iMesh.castShadow = (i !== 8 && i !== 17); // Water and Lava don't cast shadows
+            
+            // 🔥 MASSIVE FPS BOOST: Disable shadow casting for Water, Leaves, and Lava
+            iMesh.castShadow = (i !== 8 && i !== 11 && i !== 17); 
+            
             iMesh.receiveShadow = true; 
             iMesh.userData.positions = []; iMesh.userData.isTerrain = true;
             for (let j = 0; j < instances[i].length; j++) { iMesh.setMatrixAt(j, instances[i][j].matrix); iMesh.userData.positions.push({ x: instances[i][j].x, y: instances[i][j].y, z: instances[i][j].z }); }
@@ -292,13 +293,12 @@ export class World {
             let nextY = drop.mesh.position.y + (drop.velocityY * delta);
             let blockType = this.getBlockType(Math.round(drop.mesh.position.x), Math.round(nextY - 0.65), Math.round(drop.mesh.position.z));
             
-            // PHYSICS: Water & Lava Drag/Buoyancy
             if (blockType === 'water' || blockType === 'lava') {
-                drop.velocityY *= 0.8; // Drag
-                drop.velocityY += 2.0 * delta; // Float upwards
+                drop.velocityY *= 0.8; 
+                drop.velocityY += 2.0 * delta; 
                 drop.mesh.position.y = nextY;
             } else {
-                drop.velocityY -= 20.0 * delta; // Gravity
+                drop.velocityY -= 20.0 * delta; 
                 if (this.hasBlock(Math.round(drop.mesh.position.x), Math.round(nextY - 0.65), Math.round(drop.mesh.position.z))) { 
                     drop.velocityY = 0; drop.mesh.position.y = Math.round(nextY - 0.65) + 0.65; 
                 } else { 
