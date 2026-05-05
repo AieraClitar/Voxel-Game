@@ -42,8 +42,29 @@ export const AudioSys = {
     stepStone: function(dist = 0) { this.playTone(60 + Math.random()*20, 'square', 0.1, this.getDistVol(dist, 0.05), 10); },
     hitFlesh: function(dist = 0) { this.playTone(150 + Math.random()*50, 'square', 0.15, this.getDistVol(dist, 0.2), 100); this.playNoise(0.1, this.getDistVol(dist, 0.1), 500); },
     breakBlock: function(dist = 0) { this.playTone(100 + Math.random()*40, 'triangle', 0.2, this.getDistVol(dist, 0.15), 50); this.playNoise(0.2, 0.1, 1000); },
-    shootGun: function(dist = 0) { this.playNoise(0.3, this.getDistVol(dist, 0.3), 3000); this.playTone(100, 'sawtooth', 0.2, this.getDistVol(dist, 0.2), 80); },
-    shootBow: function(dist = 0) { this.playTone(400, 'sine', 0.2, this.getDistVol(dist, 0.1), 200); },
-    shootCrossbow: function(dist = 0) { this.playTone(300, 'triangle', 0.1, this.getDistVol(dist, 0.15), 50); this.playNoise(0.1, this.getDistVol(dist, 0.1), 800); },
+    
+    shootGun: function(dist = 0) { 
+        const v = this.getDistVol(dist, 0.4);
+        this.playTone(150, 'sine', 0.3, v, 100); 
+        this.playNoise(0.2, v, 4000);            
+    },
+    shootBow: function(dist = 0) { 
+        if(!this.ctx) return;
+        const v = this.getDistVol(dist, 0.25);
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        osc.type = 'triangle'; 
+        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(350, this.ctx.currentTime + 0.15); 
+        gain.gain.setValueAtTime(v, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+        osc.connect(gain); gain.connect(this.ctx.destination); osc.start(); osc.stop(this.ctx.currentTime + 0.15);
+        this.playNoise(0.15, v * 0.4, 1000); 
+    },
+    shootCrossbow: function(dist = 0) { 
+        const v = this.getDistVol(dist, 0.3);
+        this.playTone(800, 'square', 0.05, v * 0.8, 400); 
+        this.playTone(200, 'sawtooth', 0.2, v, 100);      
+        this.playNoise(0.1, v, 1500);
+    },
+    
     hurt: function() { this.playTone(200, 'sawtooth', 0.3, 0.3, 100); }
 };

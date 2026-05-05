@@ -6,43 +6,12 @@ export function create3DWeapon(type) {
     const group = new THREE.Group();
     if (!type || type === 'none') return group;
     
-    const brownMat = new THREE.MeshLambertMaterial({color: 0x5c4033}); const grayMat = new THREE.MeshLambertMaterial({color: 0x7f8c8d}); const woodMat = new THREE.MeshLambertMaterial({color: 0x8b5a2b});
-    const headMat = (type.includes('stone') || type === 'gun') ? grayMat : woodMat;
-
-    if (type.includes('sword')) {
-        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), brownMat); handle.position.y = 0.1;
-        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.04), brownMat); guard.position.y = 0.22;
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.02), headMat); blade.position.y = 0.49;
-        group.add(handle, guard, blade);
-    } else if (type.includes('pickaxe')) {
-        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.04), headMat); head.position.y = 0.48;
-        group.add(handle, head);
-    } else if (type.includes('axe')) {
-        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.04), headMat); head.position.set(0.08, 0.45, 0);
-        group.add(handle, head);
-    } else if (type.includes('shovel')) {
-        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.02), headMat); head.position.y = 0.5;
-        group.add(handle, head);
-    } else if (type === 'bow') {
-        const string = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.5, 0.01), new THREE.MeshLambertMaterial({color: 0xdddddd})); string.position.set(-0.05, 0.25, 0);
-        const top = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.04), brownMat); top.position.set(0, 0.45, 0); top.rotation.z = -0.3;
-        const bot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.25, 0.04), brownMat); bot.position.set(0, 0.05, 0); bot.rotation.z = 0.3;
-        const mid = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.05), brownMat); mid.position.y = 0.25;
-        group.add(string, top, bot, mid);
-    } else if (type === 'crossbow') {
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.04), brownMat); stock.position.y = 0.2;
-        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.04), grayMat); bow.position.y = 0.35;
-        group.add(stock, bow);
-    } else if (type === 'gun') {
-        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.04), grayMat); barrel.position.set(0, 0.2, 0.05); barrel.rotation.x = Math.PI/2;
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.04), brownMat); grip.position.set(0, 0.075, 0);
-        group.add(barrel, grip);
-    } else if (type === 'stick') {
-        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), brownMat); handle.position.y = 0.25; group.add(handle);
-    }
+    const tex = Textures.generate(type);
+    const mat = new THREE.MeshLambertMaterial({map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide});
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), mat);
+    
+    mesh.position.set(0.4, 0.4, 0); 
+    group.add(mesh);
     return group;
 }
 
@@ -50,9 +19,6 @@ export class AIController {
     constructor(scene, world, player) {
         this.scene = scene; this.world = world; this.player = player;
         this.mobs = new Map(); 
-        
-        this.matZombieSkin = new THREE.MeshLambertMaterial({color: 0x417031}); this.matZombieShirt = new THREE.MeshLambertMaterial({color: 0x00aaff}); this.matZombiePants = new THREE.MeshLambertMaterial({color: 0x4a3b82}); 
-        this.matArcherSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); this.matArcherShirt = new THREE.MeshLambertMaterial({color: 0x3a5226}); this.matArcherPants = new THREE.MeshLambertMaterial({color: 0x5c4033}); 
 
         this.geoHead = new THREE.BoxGeometry(0.5, 0.5, 0.5); 
         this.geoTorso = new THREE.BoxGeometry(0.6, 0.75, 0.25); 
@@ -64,11 +30,30 @@ export class AIController {
 
     spawnMob(id, type, x, y, z, weaponType, faceType) {
         if (this.mobs.has(id)) return;
-        const mobGroup = new THREE.Group(); const isZombie = type === 'zombie';
-        const matSkin = isZombie ? this.matZombieSkin.clone() : this.matArcherSkin.clone(); const matShirt = isZombie ? this.matZombieShirt.clone() : this.matArcherShirt.clone(); const matPants = isZombie ? this.matZombiePants.clone() : this.matArcherPants.clone();
+        const mobGroup = new THREE.Group(); 
         
-        const faceMat = new THREE.MeshLambertMaterial({ map: Textures.generate(faceType || (isZombie ? 'zombie_face' : 'archer_face')) });
-        const headMaterials = [matSkin, matSkin, matSkin, matSkin, faceMat, matSkin];
+        let matSkin, matShirt, matPants, headMat;
+
+        if (type === 'zombie') {
+            let variant = 1;
+            if (faceType && faceType.includes('variant_')) variant = parseInt(faceType.split('_')[2]) || 1;
+            
+            matSkin = new THREE.MeshLambertMaterial({ map: Textures.generate(`zombie_skin_${variant}`) });
+            matShirt = new THREE.MeshLambertMaterial({ map: Textures.generate(`zombie_shirt_${variant}`) });
+            matPants = new THREE.MeshLambertMaterial({color: 0x2e1a47}); 
+            headMat = new THREE.MeshLambertMaterial({ map: Textures.generate(`zombie_face_${variant}`) });
+        } else {
+            let role = 'bow';
+            if (weaponType === 'crossbow') role = 'crossbow';
+            else if (weaponType === 'gun') role = 'gun';
+
+            matSkin = new THREE.MeshLambertMaterial({ color: 0xe0ac69 });
+            matShirt = new THREE.MeshLambertMaterial({ map: Textures.generate(`archer_${role}_shirt`) });
+            matPants = new THREE.MeshLambertMaterial({ map: Textures.generate(`archer_${role}_pants`) });
+            headMat = new THREE.MeshLambertMaterial({ map: Textures.generate(`archer_${role}_face`) });
+        }
+        
+        const headMaterials = [matSkin, matSkin, matSkin, matSkin, headMat, matSkin];
         
         const head = new THREE.Mesh(this.geoHead, headMaterials); head.position.set(0, 1.75, 0); head.castShadow = true;
         const torso = new THREE.Mesh(this.geoTorso, matShirt); torso.position.set(0, 1.125, 0); torso.castShadow = true;
@@ -79,7 +64,7 @@ export class AIController {
         if (weaponType && weaponType !== 'none') {
             const weaponMesh = create3DWeapon(weaponType);
             weaponMesh.position.set(0, -0.75, 0); 
-            if (weaponType.includes('sword') || weaponType.includes('axe') || weaponType.includes('pickaxe')) {
+            if (weaponType.includes('sword') || weaponType.includes('axe') || weaponType.includes('pickaxe') || weaponType.includes('shovel') || weaponType === 'stick') {
                 weaponMesh.rotation.set(Math.PI, -Math.PI / 2, 0);
             } else {
                 weaponMesh.rotation.set(Math.PI / 2, 0, 0); 
@@ -114,7 +99,7 @@ export class AIController {
     killMobLocal(id) {
         const mob = this.mobs.get(id); if(!mob) return;
         this.scene.remove(mob.mesh);
-        mob.mesh.children.forEach(child => { if(child.material) { if(Array.isArray(child.material)) child.material.forEach(m => m.dispose()); else child.material.dispose(); }});
+        mob.mesh.traverse(child => { if (child.isMesh && child.geometry) child.geometry.dispose(); });
         this.mobs.delete(id);
     }
 
@@ -155,7 +140,6 @@ export class AIController {
 
             let dx = projGroup.position.x - this.player.camera.position.x; let dz = projGroup.position.z - this.player.camera.position.z; let dy = projGroup.position.y - this.player.camera.position.y;
             
-            // ✨ THE FIX: Massive collision radius specifically designed to catch arrows flying past you between frames.
             if (Math.sqrt(dx*dx + dz*dz) < 1.8 && dy < 1.8 && dy > -2.0) {
                  if (window.socket) window.socket.emit('requestPlayerDamage', { dmg: type==='gun'?35:type==='crossbow'?25:15, source: type });
                  this.scene.remove(projGroup); clearInterval(projInterval);
@@ -204,7 +188,6 @@ export class AIController {
                 if(mob.type === 'archer') { targetArmRX = -Math.PI/2.2 - strike*0.1; targetArmLX = -Math.PI/2.2; } else targetArmRX = -strike; 
             }
             
-            // ✨ THE FIX: We make the fire effect slightly larger and guarantee it spawns.
             if (mob.isBurning && Math.random() < 0.4) {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), this.fireMat);
                 f.position.set(mob.mesh.position.x + (Math.random()-0.5)*0.6, mob.mesh.position.y + 0.5 + Math.random()*1.5, mob.mesh.position.z + (Math.random()-0.5)*0.6);

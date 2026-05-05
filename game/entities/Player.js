@@ -19,6 +19,9 @@ export class Player {
 
         this.health = 100; this.maxHealth = 100; this.aiController = null; this.shakeIntensity = 0; this.footstepTimer = 0;
         this.lastNetUpdate = 0;
+        
+        // ✨ PHASE 2: Physics Trackers
+        this.inWater = false; this.wasInWater = false;
 
         this.inventory = [{ type: 'torch', count: 10 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }];
         this.mainInventory = Array.from({length: 16}, () => ({type: null, count: 0}));
@@ -117,7 +120,23 @@ export class Player {
         document.addEventListener('keydown', (e) => {
             if (e.code === 'F5') { e.preventDefault(); this.cameraMode = (this.cameraMode + 1) % 3; return; }
             if (e.code === 'KeyQ') { e.preventDefault(); this.dropSelectedItem(); return; } 
-            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break; case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
+            switch(e.code){ 
+                case 'KeyW': this.moveForward = true; break; 
+                case 'KeyA': this.moveLeft = true; break; 
+                case 'KeyS': this.moveBackward = true; break; 
+                case 'KeyD': this.moveRight = true; break; 
+                case 'Space': 
+                    // ✨ PHASE 2: Allow upward swimming in fluid
+                    if(this.canJump) { this.velocity.y = this.jumpForce; this.canJump = false; } 
+                    else if (this.inWater) { this.velocity.y = 4.0; }
+                    break; 
+                case 'KeyE': this.toggleInventory(); break; 
+                case 'Digit1': this.setHotbarSlot(0); break; 
+                case 'Digit2': this.setHotbarSlot(1); break; 
+                case 'Digit3': this.setHotbarSlot(2); break; 
+                case 'Digit4': this.setHotbarSlot(3); break; 
+                case 'Digit5': this.setHotbarSlot(4); break; 
+            }
         });
         document.addEventListener('keyup', (e) => { switch(e.code){ case 'KeyW': this.moveForward = false; break; case 'KeyA': this.moveLeft = false; break; case 'KeyS': this.moveBackward = false; break; case 'KeyD': this.moveRight = false; break; } });
         document.addEventListener('mousedown', (e) => { if(this.controls.isLocked) this.onInteract(e.button); });
@@ -135,7 +154,13 @@ export class Player {
         }
 
         const bindTouch = (id, startCb) => { const el = document.getElementById(id); if(el) el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); startCb(); }, {passive: false}); };
-        bindTouch('m-jump', () => { if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } }); bindTouch('m-inv', () => this.toggleInventory()); bindTouch('m-place', () => { if(this.gameActive) this.onInteract(2); }); bindTouch('m-drop', () => { this.dropSelectedItem(); }); 
+        
+        bindTouch('m-jump', () => { 
+            if(this.canJump) { this.velocity.y = this.jumpForce; this.canJump = false; } 
+            else if (this.inWater) { this.velocity.y = 4.0; }
+        }); 
+        
+        bindTouch('m-inv', () => this.toggleInventory()); bindTouch('m-place', () => { if(this.gameActive) this.onInteract(2); }); bindTouch('m-drop', () => { this.dropSelectedItem(); }); 
 
         const lookZone = document.getElementById('m-look-zone'); let lookTouchId = null; let lastTouchX = 0; let lastTouchY = 0; let touchStartTime = 0; let isSwiping = false;
         if (lookZone) {
@@ -325,7 +350,6 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                // ✨ FIX: Attach to the palm (Y=0.4), NOT the elbow (Y=-0.3). Tilt forward to counter the arm angle.
                 mesh1st = create3DWeapon(selected.type); 
                 mesh1st.position.set(0, 0.4, -0.1); 
                 mesh1st.rotation.set(Math.PI / 2, 0, 0); 
@@ -342,7 +366,6 @@ export class Player {
                 mesh3rd.position.set(0, -0.75, -0.15); 
                 mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                // ✨ FIX: Attach blocks to the palm (Y=0.4) so they don't clip into your body
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
                 mesh1st.position.set(0, 0.4, -0.1); 
                 mesh1st.rotation.set(0, Math.PI / 4, 0); 
@@ -413,7 +436,8 @@ export class Player {
             const type = this.world.getBlockType(bx, by, bz);
 
             if (buttonIdx === 0) { 
-                if (type === 'bedrock') break;
+                // ✨ PHASE 2: Unmineable Fluids
+                if (type === 'bedrock' || type === 'water') break;
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
@@ -433,10 +457,22 @@ export class Player {
                 if (type === 'crafting_table') { this.isCraftingTableOpen = true; this.toggleInventory(); break; }
                 const selected = this.inventory[this.selectedSlot];
                 if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
-                    if (selected.type === 'torch' && type === 'leaves') break; if (type === 'torch') break; 
-                    const normal = intersect.face.normal.clone();
-                    let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
                     
+                    const normal = intersect.face.normal.clone();
+                    
+                    // ✨ PHASE 2: Strict Placement Rules (No bottom, no floating, no leaves)
+                    if (selected.type === 'torch' && Math.round(normal.y) === -1) break;
+                    
+                    let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
+                    const targetType = this.world.getBlockType(nx, ny, nz);
+                    
+                    if (targetType !== 'air') break; 
+
+                    if (selected.type === 'torch') {
+                        let attachedBlock = this.world.getBlockType(bx, by, bz);
+                        if (attachedBlock === 'air' || attachedBlock === 'water' || attachedBlock === 'leaves') break; 
+                    }
+
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
                     
@@ -459,11 +495,37 @@ export class Player {
     update(delta) {
         if (!this.gameActive) return;
 
-        let targetX, targetZ;
-        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * this.speed; targetZ = -this.joyMove.y * this.speed; } 
-        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * this.speed; targetZ = this._input.z * this.speed; }
+        // ✨ PHASE 2: Physics Modifiers
+        let feetType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z));
+        let bodyType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 0.5), Math.floor(this.camera.position.z));
         
-        this.velocity.x += (targetX - this.velocity.x) * 10 * delta; this.velocity.z += (targetZ - this.velocity.z) * 10 * delta;
+        this.inWater = bodyType === 'water' || feetType === 'water';
+        let onIce = feetType === 'ice' && !this.inWater && this.canJump;
+
+        if (this.inWater && !this.wasInWater) { 
+            if(AudioSys && AudioSys.playNoise) AudioSys.playNoise(0.3, 0.2, 800); 
+            this.world.spawnParticles(this.camera.position.x, this.camera.position.y - 1.0, this.camera.position.z, 'splash');
+        }
+        this.wasInWater = this.inWater;
+
+        let currentSpeed = this.speed;
+        let friction = 10.0;
+
+        if (this.inWater) { 
+            currentSpeed = 2.0; // Water drag
+            friction = 5.0; 
+        } else if (onIce) { 
+            currentSpeed = 6.5; // Ice speed
+            friction = 1.0;     // Ice slip 
+        }
+
+        let targetX, targetZ;
+        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * currentSpeed; targetZ = -this.joyMove.y * currentSpeed; } 
+        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * currentSpeed; targetZ = this._input.z * currentSpeed; }
+        
+        this.velocity.x += (targetX - this.velocity.x) * friction * delta; 
+        this.velocity.z += (targetZ - this.velocity.z) * friction * delta;
+
         this._direction.set(1, 0, 0).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
         let dxRight = this._direction.x * this.velocity.x * delta; let dzRight = this._direction.z * this.velocity.x * delta;
         this._direction.set(0, 0, -1).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
@@ -472,7 +534,15 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        this.velocity.y -= this.gravity * delta; const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
+        // ✨ PHASE 2: Buoyancy 
+        if (this.inWater) {
+            this.velocity.y -= (this.gravity * 0.15) * delta; 
+            if (this.velocity.y < -2.0) this.velocity.y = -2.0; 
+        } else {
+            this.velocity.y -= this.gravity * delta; 
+        }
+
+        const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
         for (let i = 0; i < ySteps; i++) {
             this.camera.position.y += yStepAmt;
             if (this.velocity.y < 0) { if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { let highestBlockY = Math.floor(this.camera.position.y - 1.5 + 0.5); this.camera.position.y = highestBlockY + 0.5 + 1.5; this.velocity.y = 0; this.canJump = true; break; } else { this.canJump = false; } } 
