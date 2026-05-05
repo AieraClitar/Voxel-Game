@@ -144,7 +144,6 @@ if (window.io) {
         if (btn) { btn.innerText = "Create / Play"; btn.classList.remove('disabled'); }
     });
 
-    // ✨ UI FIX: Replaces blocked alerts with clean DOM resets to main menu
     window.socket.on('joinError', (msg) => { 
         alert(msg); 
         document.getElementById('hud-layer').style.display = 'none';
@@ -246,19 +245,14 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    
-    window.socket.on('mobKilled', (data) => { 
-        aiController.killMobLocal(data.mobId); 
-        if (data.killerName) window.showChat(data.killerName); 
-    });
-    
+    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); if (data.killerName) window.showChat(data.killerName); });
     window.socket.on('mobDespawned', (mobId) => { aiController.killMobLocal(mobId); });
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
-    // ✨ UI FIX: Forcefully kicks joiners to main menu when host exits instead of silently freezing
+    // ✨ THE UI FIX: Cleanly resets the game state instead of silently freezing
     window.socket.on('hostLeft', (msg) => { 
         document.getElementById('hud-layer').style.display = 'none';
         document.getElementById('pause-menu').style.display = 'none';
@@ -267,15 +261,15 @@ if (window.io) {
         const mm = document.getElementById('main-menu');
         mm.style.display = 'flex';
         mm.innerHTML = `
-            <div style="background:rgba(0,0,0,0.95); padding:40px; border-radius:16px; text-align:center; border: 2px solid #ff4444; width: 80vw; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
-                <h2 style="color:#ff4444; margin-top:0; font-family: monospace;">CONNECTION LOST</h2>
-                <p style="color:white; font-size: 18px; margin-bottom: 30px;">${msg || "The Host has left the world."}</p>
+            <div style="background:rgba(0,0,0,0.95); padding:40px; border-radius:16px; text-align:center; border: 2px solid #FFD700; width: 80vw; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+                <h2 style="color:#FFD700; margin-top:0; font-family: monospace;">CONNECTION CLOSED</h2>
+                <p style="color:white; font-size: 18px; margin-bottom: 30px;">${msg || "You have exited the world."}</p>
                 <button class="mc-btn" onclick="location.reload()">Return to Menu</button>
             </div>
         `;
         
         if (!isMobile) player.controls.unlock();
-        if(window.socket) window.socket.disconnect(); // Hard cut the cord so they don't stay in the ghost room
+        if(window.socket) window.socket.disconnect(); 
     });
     
     window.socket.on('blockUpdate', (data) => { 
@@ -292,7 +286,6 @@ if (window.io) {
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
-// ✨ MOBILE PAUSE BUTTON LISTENER
 const mPauseBtn = document.getElementById('m-pause');
 if (mPauseBtn) {
     mPauseBtn.addEventListener('touchstart', (e) => {
@@ -303,7 +296,6 @@ if (mPauseBtn) {
         }
     }, {passive: false});
 }
-
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
 const closeLobbyBtn = document.getElementById('close-lobby');
@@ -316,8 +308,9 @@ document.getElementById('btn-load-saved').addEventListener('click', () => {
 const closeSavedBtn = document.getElementById('close-saved');
 if(closeSavedBtn) closeSavedBtn.addEventListener('click', () => { document.getElementById('saved-browser').style.display = 'none'; });
 
-
+// ✨ THE FIX: We copy the player name so you can verify what you are saving under
 document.getElementById('btn-play-menu').addEventListener('click', () => {
+    document.getElementById('host-playerName').value = document.getElementById('playerName').value;
     document.getElementById('main-menu').style.display = 'none';
     document.getElementById('world-menu').style.display = 'flex';
 });
@@ -335,7 +328,9 @@ document.getElementById('btn-create-world').addEventListener('click', (e) => {
     }
 
     e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
-    localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
+    
+    // ✨ THE FIX: Explicitly grabbing the name from the World Menu text box
+    localPlayerName = document.getElementById('host-playerName').value.trim() || "Guest";
     const worldName = document.getElementById('world-name-input').value.trim() || "New World";
     
     if (window.socket) window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName, passcode: passcode });
