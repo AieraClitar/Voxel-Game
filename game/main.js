@@ -38,6 +38,12 @@ window.showChat = (msg) => {
 
 let localPlayerName = "Guest";
 let localRoomStartTime = Date.now() - (0.25 * 240 * 1000); 
+
+// ✨ THE FIX: Moved these to the top so the socket can access them instantly.
+let isGeneratingWorld = false; 
+let initialChunksNeeded = 0; 
+let initialChunksDone = 0;
+
 const playerListUI = document.getElementById('playerListUI');
 const ul = document.getElementById('playerList');
 const networkPlayers = new Map();
@@ -103,23 +109,74 @@ if (window.io) {
 
         activeWorlds.forEach(serverInfo => {
             const div = document.createElement('div'); div.className = 'server-item';
-            const info = document.createElement('span'); info.innerText = `🌍 ${serverInfo.hostName}'s World (${serverInfo.playerCount} player${serverInfo.playerCount !== 1 ? 's' : ''})`;
-            const joinBtn = document.createElement('button'); joinBtn.innerText = 'Join'; joinBtn.className = 'mc-btn';
+            const info = document.createElement('span'); 
+            info.innerText = `🌍 ${serverInfo.worldName} (Host: ${serverInfo.hostName}) - ${serverInfo.playerCount} player(s)`;
             
-            joinBtn.onclick = () => {
+            const joinBtn = document.createElement('button'); joinBtn.innerText = 'Join'; joinBtn.className = 'mc-btn';
+            joinBtn.onclick = (e) => {
+                e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
                 localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
                 window.socket.emit('joinGame', { roomId: serverInfo.id, playerName: localPlayerName });
                 AudioSys.init(); 
-                document.getElementById('lobby-browser').style.display = 'none'; document.getElementById('main-menu').style.display = 'none';
-                document.getElementById('loading-screen').style.display = 'flex';
-                if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-                player.gameActive = true; 
             };
             div.appendChild(info); div.appendChild(joinBtn); serverList.appendChild(div);
         });
     });
 
+    window.socket.on('savedWorldsList', (savedWorldsArray) => {
+        const savedList = document.getElementById('saved-list'); if(!savedList) return;
+        savedList.innerHTML = '';
+        if(savedWorldsArray.length === 0) { savedList.innerHTML = '<div style="color: #aaa; text-align: center; padding: 10px;">No saved worlds found. Create one!</div>'; return; }
+
+        savedWorldsArray.forEach(worldName => {
+            const div = document.createElement('div'); div.className = 'server-item';
+            const info = document.createElement('span'); info.innerText = `💾 ${worldName}`;
+            
+            const hostBtn = document.createElement('button'); hostBtn.innerText = 'Host World'; hostBtn.className = 'mc-btn';
+            hostBtn.onclick = () => {
+                document.getElementById('world-name-input').value = worldName;
+                document.getElementById('world-passcode').value = "";
+                document.getElementById('saved-browser').style.display = 'none';
+                document.getElementById('world-menu').style.display = 'flex';
+                document.getElementById('world-passcode').focus();
+            };
+            div.appendChild(info); div.appendChild(hostBtn); savedList.appendChild(div);
+        });
+    });
+
+    window.socket.on('hostError', (msg) => { 
+        alert(msg); 
+        const btn = document.getElementById('btn-create-world');
+        if (btn) { btn.innerText = "Create / Play"; btn.classList.remove('disabled'); }
+    });
+
+    window.socket.on('joinError', (msg) => { 
+        alert(msg); 
+        document.getElementById('hud-layer').style.display = 'none';
+        document.getElementById('main-menu').style.display = 'flex';
+        player.gameActive = false;
+        setTimeout(() => location.reload(), 1000); 
+    });
+
+    window.socket.on('restore_player_data', (data) => {
+        player.camera.position.set(data.x, data.y, data.z);
+        player.health = data.health;
+        if (data.inventory) {
+            player.inventory = data.inventory.hotbar;
+            player.mainInventory = data.inventory.main;
+            player.updateInventoryUI();
+        }
+        window.showChat(`Welcome back! State restored.`);
+    });
+
     window.socket.on('world_snapshot', (data) => {
+        document.getElementById('lobby-browser').style.display = 'none'; 
+        document.getElementById('saved-browser').style.display = 'none'; 
+        document.getElementById('world-menu').style.display = 'none'; 
+        document.getElementById('main-menu').style.display = 'none';
+        document.getElementById('loading-screen').style.display = 'flex';
+        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+
         localRoomStartTime = Date.now() - (data.ageInSeconds * 1000); 
         
         scene.remove(world.dropGroup); scene.remove(world.particleGroup);
@@ -149,6 +206,15 @@ if (window.io) {
     });
 
     window.socket.on('server_tick', (data) => {
+        
+        for (const id of networkPlayers.keys()) {
+            if (!data.players[id] && id !== window.socket.id) {
+                scene.remove(networkPlayers.get(id));
+                networkPlayers.delete(id);
+                window.updatePlayerList();
+            }
+        }
+
         Object.keys(data.players).forEach(id => {
             if (id === window.socket.id || !networkPlayers.has(id)) return;
             const p = networkPlayers.get(id); const s = data.players[id];
@@ -194,16 +260,32 @@ if (window.io) {
     
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
-    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); window.showChat(`⚔️ ${data.killerName} slaughtered a ${data.mobType}!`); });
-    
-    // ✨ FIX: Separated the Despawn Logic entirely so it doesn't trigger the Kill feed.
+    window.socket.on('mobKilled', (data) => { aiController.killMobLocal(data.mobId); if (data.killerName) window.showChat(data.killerName); });
     window.socket.on('mobDespawned', (mobId) => { aiController.killMobLocal(mobId); });
 
     window.socket.on('playerDisconnected', (id) => {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
-    window.socket.on('hostLeft', () => { alert("The Host has left the world."); location.reload(); });
+    window.socket.on('hostLeft', (msg) => { 
+        document.getElementById('hud-layer').style.display = 'none';
+        document.getElementById('pause-menu').style.display = 'none';
+        player.gameActive = false;
+        
+        const mm = document.getElementById('main-menu');
+        mm.style.display = 'flex';
+        mm.innerHTML = `
+            <div style="background:rgba(0,0,0,0.95); padding:40px; border-radius:16px; text-align:center; border: 2px solid #FFD700; width: 80vw; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+                <h2 style="color:#FFD700; margin-top:0; font-family: monospace;">CONNECTION CLOSED</h2>
+                <p style="color:white; font-size: 18px; margin-bottom: 30px;">${msg || "You have exited the world."}</p>
+                <button class="mc-btn" onclick="location.reload()">Return to Menu</button>
+            </div>
+        `;
+        
+        if (!isMobile) player.controls.unlock();
+        if(window.socket) window.socket.disconnect(); 
+    });
+    
     window.socket.on('blockUpdate', (data) => { 
         const dist = player.camera.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z));
         if(data.action === 'add') { 
@@ -218,16 +300,75 @@ if (window.io) {
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
+const univPauseBtn = document.getElementById('btn-univ-pause');
+if (univPauseBtn) {
+    univPauseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (player.gameActive && !player.isInvOpen) {
+            document.getElementById('pause-menu').style.display = 'flex';
+            player.gameActive = false;
+            if (!isMobile) player.controls.unlock();
+        }
+    });
+    univPauseBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (player.gameActive && !player.isInvOpen) {
+            document.getElementById('pause-menu').style.display = 'flex';
+            player.gameActive = false;
+        }
+    }, {passive: false});
+}
+
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
 const closeLobbyBtn = document.getElementById('close-lobby');
 if(closeLobbyBtn) closeLobbyBtn.addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'none'; });
 
+document.getElementById('btn-load-saved').addEventListener('click', () => { 
+    if (window.socket) window.socket.emit('requestSavedWorlds');
+    document.getElementById('saved-browser').style.display = 'block'; 
+});
+const closeSavedBtn = document.getElementById('close-saved');
+if(closeSavedBtn) closeSavedBtn.addEventListener('click', () => { document.getElementById('saved-browser').style.display = 'none'; });
+
 document.getElementById('btn-play-menu').addEventListener('click', () => {
-    localPlayerName = document.getElementById('playerName').value.trim() || "Guest";
-    if (window.socket) window.socket.emit('createGame', localPlayerName);
-    AudioSys.init(); document.getElementById('main-menu').style.display = 'none'; document.getElementById('loading-screen').style.display = 'flex';
-    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-    player.gameActive = true; 
+    document.getElementById('host-playerName').value = document.getElementById('playerName').value;
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('world-menu').style.display = 'flex';
+});
+
+document.getElementById('btn-back-menu').addEventListener('click', () => {
+    document.getElementById('world-menu').style.display = 'none';
+    document.getElementById('main-menu').style.display = 'flex';
+});
+
+document.getElementById('btn-create-world').addEventListener('click', (e) => {
+    const passcode = document.getElementById('world-passcode').value.trim();
+    if (!passcode) {
+        alert("A passcode is required to secure your world.");
+        return;
+    }
+
+    e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
+    
+    localPlayerName = document.getElementById('host-playerName').value.trim() || "Guest";
+    const worldName = document.getElementById('world-name-input').value.trim() || "New World";
+    
+    if (window.socket) window.socket.emit('createGame', { playerName: localPlayerName, worldName: worldName, passcode: passcode });
+    AudioSys.init(); 
+});
+
+document.getElementById('btn-save-exit').addEventListener('click', () => {
+    if (window.socket && player.gameActive) {
+        document.getElementById('save-notif').style.display = 'block';
+        window.socket.emit('saveAndExit', {
+            playerName: localPlayerName,
+            inventory: { hotbar: player.inventory, main: player.mainInventory },
+            x: player.camera.position.x,
+            y: player.camera.position.y,
+            z: player.camera.position.z,
+            health: player.health
+        });
+    }
 });
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); if(playerListUI) playerListUI.style.display = 'block'; }});
@@ -267,12 +408,15 @@ previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight =
 const previewPlayer = new THREE.Group();
 const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
 const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); 
+
+// ✨ THE FIX: Corrected "new Mesh" to "new THREE.Mesh" here to fix the crash
+const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); 
+const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
+
 const previewHeldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshLambertMaterial({color: 0xffffff})); armR.add(previewHeldBlock); previewPlayer.add(head, body, armL, armR, legL, legR); previewScene.add(previewPlayer);
 
-let isGeneratingWorld = false; let initialChunksNeeded = 0; let initialChunksDone = 0;
-
-const pauseMenu = document.getElementById('pause-menu');
+let pauseMenu = document.getElementById('pause-menu');
 document.addEventListener('click', (e) => { if (e.target.tagName === 'CANVAS' && player.gameActive && !player.isInvOpen && pauseMenu.style.display !== 'flex' && !isMobile) player.controls.lock(); });
 player.controls.addEventListener('unlock', () => { if (player.gameActive && !player.isInvOpen && !isMobile) pauseMenu.style.display = 'flex'; });
 player.controls.addEventListener('lock', () => { pauseMenu.style.display = 'none'; player.gameActive = true; });
@@ -295,7 +439,10 @@ function animate() {
         document.getElementById('loading-progress').style.width = `${(initialChunksDone / initialChunksNeeded) * 100}%`;
         if (world.chunkQueue.length === 0) {
             isGeneratingWorld = false; let spawnY = world.getSurfaceHeight(16, 16) + 2;
-            player.camera.position.set(16, spawnY, 16); player.velocity.set(0,0,0);
+            if (player.velocity.x === 0 && player.velocity.z === 0) {
+                player.camera.position.set(16, spawnY, 16);
+            }
+            player.velocity.set(0,0,0);
             document.getElementById('loading-screen').style.display = 'none'; document.getElementById('hud-layer').style.display = 'block';
             player.gameActive = true; if (!isMobile) player.controls.lock();
         }
