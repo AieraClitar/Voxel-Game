@@ -38,6 +38,12 @@ window.showChat = (msg) => {
 
 let localPlayerName = "Guest";
 let localRoomStartTime = Date.now() - (0.25 * 240 * 1000); 
+
+// ✨ THE FIX: Moved these to the top so the socket can access them instantly.
+let isGeneratingWorld = false; 
+let initialChunksNeeded = 0; 
+let initialChunksDone = 0;
+
 const playerListUI = document.getElementById('playerListUI');
 const ul = document.getElementById('playerList');
 const networkPlayers = new Map();
@@ -201,7 +207,6 @@ if (window.io) {
 
     window.socket.on('server_tick', (data) => {
         
-        // ✨ THE FIX: Client-Side Ghost Reconciliation. Vaporizes any mesh that isn't actively sent by the server.
         for (const id of networkPlayers.keys()) {
             if (!data.players[id] && id !== window.socket.id) {
                 scene.remove(networkPlayers.get(id));
@@ -295,7 +300,6 @@ if (window.io) {
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
-// ✨ THE FIX: Universal Pause Button Logic
 const univPauseBtn = document.getElementById('btn-univ-pause');
 if (univPauseBtn) {
     univPauseBtn.addEventListener('click', (e) => {
@@ -404,12 +408,15 @@ previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight =
 const previewPlayer = new THREE.Group();
 const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
 const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); const legL = new Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); 
+
+// ✨ THE FIX: Corrected "new Mesh" to "new THREE.Mesh" here to fix the crash
+const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); 
+const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
+
 const previewHeldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshLambertMaterial({color: 0xffffff})); armR.add(previewHeldBlock); previewPlayer.add(head, body, armL, armR, legL, legR); previewScene.add(previewPlayer);
 
-let isGeneratingWorld = false; let initialChunksNeeded = 0; let initialChunksDone = 0;
-
-const pauseMenu = document.getElementById('pause-menu');
+let pauseMenu = document.getElementById('pause-menu');
 document.addEventListener('click', (e) => { if (e.target.tagName === 'CANVAS' && player.gameActive && !player.isInvOpen && pauseMenu.style.display !== 'flex' && !isMobile) player.controls.lock(); });
 player.controls.addEventListener('unlock', () => { if (player.gameActive && !player.isInvOpen && !isMobile) pauseMenu.style.display = 'flex'; });
 player.controls.addEventListener('lock', () => { pauseMenu.style.display = 'none'; player.gameActive = true; });
