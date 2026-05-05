@@ -4,9 +4,10 @@ import { Textures } from '../utils/Textures.js';
 
 const CHUNK_SIZE = 16; const CHUNK_HEIGHT = 128; const Y_OFFSET = 30; const RENDER_DISTANCE = 3; const WATER_LEVEL = 5;
 
+// ✨ PHASE 3: Added Lava to Block Types
 const BLOCK_TYPES = {
     'air': 0, 'bedrock': 1, 'stone': 2, 'dirt': 3, 'grass': 4, 'sand': 5, 'snow': 6, 'ice': 7, 'water': 8, 'oak_wood': 9,
-    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16
+    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16, 'lava': 17
 };
 const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
@@ -35,7 +36,9 @@ export class World {
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
             11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
             13: [ new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }) ],
-            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') })
+            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') }),
+            // ✨ PHASE 3: Emissive glowing Lava Material (Saves massive performance over point lights)
+            17: new THREE.MeshLambertMaterial({ map: Textures.generate('lava'), emissive: 0xff3300, emissiveIntensity: 0.8, transparent: true, opacity: 0.9 })
         };
 
         this.itemMaterials = {
@@ -49,7 +52,7 @@ export class World {
     getSurfaceHeight(x, z) { for (let y = 60; y >= -30; y--) { if (this.hasBlock(x, y, z)) return y; } return 5; }
     hasRoof(x, y, z) { for(let i = Math.round(y) + 1; i <= Math.round(y) + 30; i++) { const type = this.getBlockType(Math.round(x), i, Math.round(z)); if(type !== 'air' && type !== 'water' && type !== 'torch') return true; } return false; }
     getBlockType(x, y, z) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return 'air'; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const data = this.chunkData.get(this.getChunkKey(cx, cz)); if (!data) return 'air'; const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx === -1) return 'air'; return ID_TO_TYPE[data[idx]]; }
-    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water'; }
+    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water' && type !== 'lava'; } // ✨ Phase 3 Update
     setBlockData(x, y, z, typeId) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const cKey = this.getChunkKey(cx, cz); let data = this.chunkData.get(cKey); if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); } const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx !== -1) data[idx] = typeId; }
 
     addBlock(x, y, z, typeStr, normal = null, force = false) {
@@ -64,18 +67,34 @@ export class World {
         const type = this.getBlockType(x, y, z); 
         if (!force && type === 'air') return;
         this.setBlockData(x, y, z, 0); const key = `${x},${y},${z}`;
-        if (type === 'torch' && this.lightSources.has(key)) { this.scene.remove(this.lightSources.get(key)); this.lightSources.delete(key); this.torchNormals.delete(key); }
+        
+        if (type === 'torch' && this.lightSources.has(key)) { 
+            const light = this.lightSources.get(key);
+            this.scene.remove(light); 
+            if (light.dispose) light.dispose(); 
+            this.lightSources.delete(key); 
+            this.torchNormals.delete(key); 
+        }
+
         this.checkAndBreakAttachedTorches(x, y, z); this.triggerMeshRebuild(x, y, z);
         if(!skipParticles && type !== 'air') this.spawnParticles(x, y, z, type); 
     }
 
     spawnParticles(x, y, z, type, isBlood = false) {
         if (!type || type === 'air') return;
-        const count = isBlood ? 8 : 12; const color = isBlood ? 0xcc0000 : (type.includes('leaves') ? 0x2d5a27 : (type.includes('wood') || type.includes('planks') ? 0x5c4033 : 0x888888));
+        let count = 12; let color = 0x888888;
+        
+        if (isBlood) { count = 8; color = 0xcc0000; }
+        else if (type === 'splash') { count = 15; color = 0xffffff; } 
+        // ✨ PHASE 3: Lava Particles
+        else if (type === 'lava') { count = 15; color = 0xff4500; }
+        else if (type.includes('leaves')) color = 0x2d5a27;
+        else if (type.includes('wood') || type.includes('planks')) color = 0x5c4033;
+        
         const mat = new THREE.MeshBasicMaterial({ color: color });
         for (let i = 0; i < count; i++) {
             const mesh = new THREE.Mesh(this.geoParticle, mat); mesh.position.set(x + (Math.random()-0.5), y + (Math.random()-0.5), z + (Math.random()-0.5)); this.particleGroup.add(mesh);
-            this.particles.push({ mesh: mesh, life: 1.0, vel: new THREE.Vector3((Math.random()-0.5)*5, Math.random()*5, (Math.random()-0.5)*5) });
+            this.particles.push({ mesh: mesh, life: 1.0, vel: new THREE.Vector3((Math.random()-0.5)*5, Math.random()*5 + ((type==='splash'||type==='lava')?2:0), (Math.random()-0.5)*5) });
         }
     }
 
@@ -119,11 +138,9 @@ export class World {
                     else if (y <= height) { let n1 = this.roughMap.getNoise(wx * 0.04, y * 0.04 + wz * 0.01); let n2 = this.humidMap.getNoise(wz * 0.04, y * 0.04 + wx * 0.01); if (Math.abs(n1) < 0.12 && Math.abs(n2) < 0.12) isCave = true; }
                     
                     if (!isCave) {
-                        // ✨ THE FIX: Tundra lakes are filled with WATER (8), with ICE (7) only on the top block!
                         if (y > height && y <= WATER_LEVEL) {
                             typeId = (biome === 'tundra' && y === WATER_LEVEL) ? 7 : 8; 
                         } 
-                        // ✨ THE FIX: The bottom of lakes are Dirt (3), not Snow.
                         else if (y === height) { 
                             if (height < WATER_LEVEL) {
                                 typeId = 3; 
@@ -134,6 +151,11 @@ export class World {
                         else if (y > height - 3 && y !== -30) typeId = biome === 'desert' ? 5 : 3; 
                         
                         const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); if (data[idx] === 0) data[idx] = typeId;
+                    } else {
+                        // ✨ PHASE 3: Subterranean Lava Lakes (Below Y: -25)
+                        if (y <= -25) {
+                            const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); if (data[idx] === 0) data[idx] = 17;
+                        }
                     }
                 }
 
@@ -179,11 +201,11 @@ export class World {
         const data = this.chunkData.get(cKey); if (!data) return;
 
         const chunkGroup = new THREE.Group(); chunkGroup.userData.isChunk = true;
-        const instances = {}; for(let i = 1; i <= 16; i++) instances[i] = []; 
+        const instances = {}; for(let i = 1; i <= 17; i++) instances[i] = []; // Support 17 blocks now
         const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE; const matrix = new THREE.Matrix4();
         
-        // ✨ THE FIX: Ice (7) is added here so blocks below it don't turn invisible to create the void bug
-        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15;
+        // ✨ PHASE 3: Added 17 (Lava) to transparent logic to prevent invisible walls
+        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15 && id !== 17;
 
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -206,7 +228,7 @@ export class World {
             }
         }
 
-        for (let i = 1; i <= 16; i++) {
+        for (let i = 1; i <= 17; i++) {
             if (instances[i].length === 0) continue;
             const geo = (i === 15) ? this.geoTorch : this.geoBlock; const mat = this.materials[i]; const iMesh = new THREE.InstancedMesh(geo, mat, instances[i].length); iMesh.castShadow = true; iMesh.receiveShadow = true; 
             iMesh.userData.positions = []; iMesh.userData.isTerrain = true;
@@ -254,7 +276,7 @@ export class World {
     }
 
     spawnNetworkedDrop(id, x, y, z, typeStr) {
-        if (typeStr === 'air' || typeStr === 'water' || this.drops.some(d => d.id === id)) return;
+        if (typeStr === 'air' || typeStr === 'water' || typeStr === 'lava' || this.drops.some(d => d.id === id)) return;
         const geo = typeStr === 'torch' ? this.dropGeoTorch : this.dropGeoBlock;
         const mesh = new THREE.Mesh(geo, this.itemMaterials[typeStr] || this.itemMaterials['stone']);
         mesh.position.set(x + (Math.random()-0.5)*0.2, y, z + (Math.random()-0.5)*0.2);
