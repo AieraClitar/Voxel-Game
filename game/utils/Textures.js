@@ -7,9 +7,8 @@ export const Textures = {
         if (!type) return null;
         if (this.cache[type]) return this.cache[type];
 
-        const isTool = type === 'stick' || type === 'bow' || type === 'crossbow' || type === 'gun' || (type && (type.includes('sword') || type.includes('pickaxe') || type.includes('axe') || type.includes('shovel')));
         const canvas = document.createElement('canvas');
-        canvas.width = isTool ? 256 : 16; canvas.height = isTool ? 256 : 16;
+        canvas.width = 16; canvas.height = 16;
         const ctx = canvas.getContext('2d');
 
         const fillBase = (hex) => { ctx.fillStyle = hex; ctx.fillRect(0, 0, 16, 16); };
@@ -19,19 +18,27 @@ export const Textures = {
             ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
         };
 
-        if (type === 'grass_top') { fillBase('#3b8526'); addNoise(25, 0.25); ctx.fillStyle = '#4cc22f'; for(let i=0; i<15; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 1, 2); }
-        else if (type === 'dirt') { fillBase('#4a3018'); addNoise(35, 0.35); ctx.fillStyle = '#2b1b0c'; for(let i=0; i<20; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); }
-        else if (type === 'grass_side') { fillBase('#4a3018'); addNoise(35, 0.35); ctx.fillStyle = '#3b8526'; ctx.fillRect(0, 0, 16, 4); for(let x=0; x<16; x++) ctx.fillRect(x, 4, 1, Math.floor(Math.random() * 5)); }
+        if (type === 'bedrock') { fillBase('#111111'); addNoise(20, 0.5); ctx.fillStyle='#000'; ctx.fillRect(2,2,4,4); ctx.fillRect(10,8,3,3); }
+        else if (type === 'grass_top') { fillBase('#3b8526'); addNoise(25, 0.25); ctx.fillStyle = '#4cc22f'; for(let i=0; i<15; i++) { ctx.fillRect(Math.random()*16, Math.random()*16, 1, 2); } }
+        else if (type === 'dirt') { fillBase('#4a3018'); addNoise(35, 0.35); ctx.fillStyle = '#2b1b0c'; for(let i=0; i<20; i++) { ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); } }
+        else if (type === 'grass_side') { fillBase('#4a3018'); addNoise(35, 0.35); ctx.fillStyle = '#3b8526'; ctx.fillRect(0, 0, 16, 4); for(let x=0; x<16; x++) { let drop = Math.floor(Math.random() * 5); ctx.fillRect(x, 4, 1, drop); } }
         else if (type === 'stone') { fillBase('#555555'); addNoise(45, 0.4); ctx.fillStyle = '#333333'; ctx.fillRect(2, 2, 2, 1); ctx.fillRect(10, 8, 3, 1); ctx.fillRect(4, 12, 2, 1); ctx.fillStyle = '#888888'; ctx.fillRect(2, 3, 2, 1); ctx.fillRect(10, 9, 3, 1); }
-        else if (type === 'sand') { fillBase('#e6c27a'); addNoise(20, 0.25); ctx.fillStyle = '#c7a35c'; for(let i=0; i<15; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); }
-        else if (type === 'leaves') { fillBase('#1e4219'); addNoise(40, 0.5); for(let i=0; i<35; i++) ctx.clearRect(Math.floor(Math.random()*15), Math.floor(Math.random()*15), 2, 2); }
+        else if (type === 'sand') { fillBase('#e6c27a'); addNoise(20, 0.25); ctx.fillStyle = '#c7a35c'; for(let i=0; i<15; i++) { ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); } }
+        else if (type === 'leaves') { fillBase('#1e4219'); addNoise(40, 0.5); for(let i=0; i<35; i++) { let sx = Math.floor(Math.random()*15); let sy = Math.floor(Math.random()*15); ctx.clearRect(sx, sy, 2, 2); } }
         else if (type === 'snow') { fillBase('#f4f9ff'); addNoise(10, 0.15); }
         else if (type === 'ice') { fillBase('#a0d8ef'); addNoise(15, 0.15); ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(2, 14); ctx.lineTo(14, 2); ctx.stroke(); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(0, 0, 16, 2); }
-        else if (type === 'water') { const grad = ctx.createLinearGradient(0,0, 0,16); grad.addColorStop(0, '#1ca3ec'); grad.addColorStop(1, '#0f5e9c'); ctx.fillStyle = grad; ctx.fillRect(0,0,16,16); ctx.fillStyle = 'rgba(255,255,255,0.2)'; for(let i=0; i<6; i++) ctx.fillRect(Math.random()*16, Math.random()*16, Math.random()*8+2, 1); }
+        else if (type === 'water') {
+            const grad = ctx.createLinearGradient(0,0, 0,16); grad.addColorStop(0, '#1ca3ec'); grad.addColorStop(1, '#0f5e9c'); ctx.fillStyle = grad; ctx.fillRect(0,0,16,16);
+            ctx.fillStyle = 'rgba(255,255,255,0.2)'; for(let i=0; i<6; i++) { ctx.fillRect(Math.random()*16, Math.random()*16, Math.random()*8+2, 1); } 
+        }
+        else if (type === 'lava') {
+            const grad = ctx.createLinearGradient(0,0, 0,16); grad.addColorStop(0, '#ff6600'); grad.addColorStop(1, '#cc2200'); ctx.fillStyle = grad; ctx.fillRect(0,0,16,16);
+            ctx.fillStyle = 'rgba(255,255,0,0.5)'; for(let i=0; i<8; i++) { ctx.fillRect(Math.random()*16, Math.random()*16, 2, 2); } 
+        }
         else if (type === 'oak_side') { fillBase('#4a332a'); addNoise(15, 0.2); ctx.fillStyle = '#2c1e18'; for(let x=0; x<16; x+=3) ctx.fillRect(x + Math.random(), 0, 1, 16); }
         else if (type === 'wood_top') { fillBase('#8b5a2b'); ctx.strokeStyle = '#4a332a'; ctx.lineWidth = 1; for(let r=2; r<10; r+=2) { ctx.beginPath(); ctx.arc(8, 8, r, 0, Math.PI*2); ctx.stroke(); } }
-        else if (type === 'oak_planks') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = 'rgba(0,0,0,0.5)'; [3,7,11,15].forEach(y => ctx.fillRect(0, y, 16, 1)); [0,8].forEach(x => ctx.fillRect(x+4, 0, 1, 3)); [4,12].forEach(x => ctx.fillRect(x+6, 4, 1, 3)); }
-        else if (type === 'birch_planks') { fillBase('#e2d4b5'); addNoise(15, 0.15); ctx.fillStyle = 'rgba(0,0,0,0.3)'; [3,7,11,15].forEach(y => ctx.fillRect(0, y, 16, 1)); [0,8].forEach(x => ctx.fillRect(x+4, 0, 1, 3)); [4,12].forEach(x => ctx.fillRect(x+6, 4, 1, 3)); }
+        else if (type === 'oak_planks') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 3, 16, 1); ctx.fillRect(0, 7, 16, 1); ctx.fillRect(0, 11, 16, 1); ctx.fillRect(0, 15, 16, 1); ctx.fillRect(4, 0, 1, 3); ctx.fillRect(10, 4, 1, 3); ctx.fillRect(6, 8, 1, 3); ctx.fillRect(12, 12, 1, 3); }
+        else if (type === 'birch_planks') { fillBase('#e2d4b5'); addNoise(15, 0.15); ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(0, 3, 16, 1); ctx.fillRect(0, 7, 16, 1); ctx.fillRect(0, 11, 16, 1); ctx.fillRect(0, 15, 16, 1); ctx.fillRect(4, 0, 1, 3); ctx.fillRect(10, 4, 1, 3); ctx.fillRect(6, 8, 1, 3); ctx.fillRect(12, 12, 1, 3); }
         else if (type === 'crafting_side') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0,0,16,2); ctx.fillStyle = '#888'; ctx.fillRect(10, 4, 4, 6); ctx.fillStyle = '#333'; ctx.fillRect(2, 6, 4, 4); }
         else if (type === 'crafting_top') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 7, 16, 2); ctx.fillRect(0, 14, 16, 2); ctx.fillRect(0, 0, 2, 16); ctx.fillRect(7, 0, 2, 16); ctx.fillRect(14, 0, 2, 16); }
         else if (type === 'cactus') { fillBase('#2ecc71'); addNoise(15, 0.2); ctx.fillStyle = '#1e8449'; for(let x=0; x<16; x+=2) ctx.fillRect(x, 0, 1, 16); ctx.fillStyle = '#000000'; for(let i=0; i<15; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); }
@@ -66,26 +73,12 @@ export const Textures = {
         else if (type === 'archer_bow_pants') { fillBase('#4CAF50'); addNoise(15, 0.2); }
         else if (type === 'archer_crossbow_pants') { fillBase('#4a2f1d'); addNoise(20, 0.2); }
         else if (type === 'archer_gun_pants') { fillBase('#2c3e50'); addNoise(15, 0.2); }
-
-        else if (isTool) {
-            ctx.clearRect(0, 0, 256, 256);
-            const isStone = type.includes('stone'); const headColor = isStone ? '#7c8082' : '#997a4d'; const handleColor = '#594026'; const outlineColor = '#1f1f1f';
-            ctx.translate(128, 128); ctx.lineWidth = 14; ctx.strokeStyle = outlineColor; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-            if (type === 'stick') { ctx.rotate(Math.PI / 4); ctx.fillStyle = handleColor; ctx.beginPath(); ctx.rect(-8, 0, 16, 60); ctx.fill(); ctx.stroke(); }
-            else if (type.includes('sword')) { ctx.rotate(Math.PI / 4); ctx.fillStyle = handleColor; ctx.beginPath(); ctx.rect(-8, 0, 16, 45); ctx.fill(); ctx.stroke(); ctx.fillStyle = headColor; ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(-16, -80); ctx.lineTo(0, -105); ctx.lineTo(16, -80); ctx.lineTo(16, 0); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-45, -10); ctx.lineTo(0, 10); ctx.lineTo(45, -10); ctx.lineTo(45, 10); ctx.lineTo(0, 30); ctx.lineTo(-45, 10); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-            else if (type.includes('pickaxe')) { ctx.rotate(Math.PI / 4); ctx.fillStyle = handleColor; ctx.beginPath(); ctx.rect(-8, 0, 16, 60); ctx.fill(); ctx.stroke(); ctx.fillStyle = headColor; ctx.beginPath(); ctx.moveTo(-85, -50); ctx.quadraticCurveTo(0, -120, 85, -50); ctx.lineTo(85, -25); ctx.quadraticCurveTo(0, -90, -85, -25); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = handleColor; ctx.fillRect(-12, -75, 24, 20); ctx.strokeRect(-12, -75, 24, 20); }
-            else if (type.includes('axe')) { ctx.rotate(Math.PI / 4); ctx.fillStyle = handleColor; ctx.beginPath(); ctx.rect(-8, 0, 16, 60); ctx.fill(); ctx.stroke(); ctx.fillStyle = headColor; ctx.beginPath(); ctx.moveTo(15, -85); ctx.lineTo(-15, -85); ctx.quadraticCurveTo(-70, -85, -70, -55); ctx.lineTo(-35, -40); ctx.lineTo(-70, -25); ctx.quadraticCurveTo(-70, 5, -15, 5); ctx.lineTo(15, 5); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-            else if (type.includes('shovel')) { ctx.rotate(Math.PI / 4); ctx.fillStyle = handleColor; ctx.beginPath(); ctx.rect(-8, 0, 16, 60); ctx.fill(); ctx.stroke(); ctx.fillStyle = headColor; ctx.beginPath(); ctx.moveTo(-28, -20); ctx.lineTo(0, -85); ctx.lineTo(28, -20); ctx.lineTo(16, 15); ctx.lineTo(-16, 15); ctx.closePath(); ctx.fill(); ctx.stroke(); }
-            else if (type === 'bow') { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.arc(0, 0, 60, -Math.PI * 0.75, Math.PI * 0.75); ctx.stroke(); ctx.lineWidth = 4; ctx.strokeStyle = '#cccccc'; ctx.beginPath(); ctx.moveTo(Math.cos(-Math.PI * 0.75) * 60, Math.sin(-Math.PI * 0.75) * 60); ctx.lineTo(Math.cos(Math.PI * 0.75) * 60, Math.sin(Math.PI * 0.75) * 60); ctx.stroke(); }
-            else if (type === 'crossbow') { ctx.rotate(Math.PI / 4); ctx.fillStyle = handleColor; ctx.fillRect(-12, -20, 24, 80); ctx.strokeRect(-12, -20, 24, 80); ctx.beginPath(); ctx.arc(0, -40, 50, Math.PI, 0); ctx.stroke(); ctx.lineWidth = 4; ctx.strokeStyle = '#cccccc'; ctx.beginPath(); ctx.moveTo(-50, -40); ctx.lineTo(0, 0); ctx.lineTo(50, -40); ctx.stroke(); }
-            else if (type === 'gun') { ctx.fillStyle = '#444444'; ctx.fillRect(-15, -40, 30, 80); ctx.strokeRect(-15, -40, 30, 80); ctx.fillStyle = handleColor; ctx.fillRect(-15, 0, 50, 30); ctx.strokeRect(-15, 0, 50, 30); }
-        } else { fillBase('#ff00ff'); }
+        else { fillBase('#ff00ff'); } // Missing Texture Fallback
 
         const texture = new THREE.CanvasTexture(canvas); 
-        texture.magFilter = isTool ? THREE.LinearFilter : THREE.NearestFilter; 
+        texture.magFilter = THREE.NearestFilter; 
         
-        // ✨ PHASE 2: Allow fluid animation wrapping
-        if (type === 'water') {
+        if (type === 'water' || type === 'lava') {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
         }
