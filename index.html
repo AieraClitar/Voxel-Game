@@ -159,7 +159,6 @@
         <h1 class="game-title">Create New World</h1>
         <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
         
-        <!-- ✨ THE FIX: Added World Passcode Field -->
         <input type="password" id="world-passcode" class="mc-input" placeholder="World Passcode (Required)">
 
         <button id="btn-create-world" class="mc-btn">Create / Play</button>
@@ -196,6 +195,9 @@
         </div>
 
         <div id="mobile-controls">
+            <!-- ✨ MOBILE PAUSE BUTTON -->
+            <div class="m-btn" id="m-pause" style="top: max(env(safe-area-inset-top), 20px); left: max(env(safe-area-inset-left), 20px); width: 45px; height: 45px; font-size: 20px; z-index: 900;">⏸️</div>
+            
             <div id="m-look-zone"></div>
             <div id="m-joystick-zone"><div id="m-joystick-knob"></div></div>
             <div id="m-actions">
