@@ -200,6 +200,16 @@ if (window.io) {
     });
 
     window.socket.on('server_tick', (data) => {
+        
+        // ✨ THE FIX: Client-Side Ghost Reconciliation. Vaporizes any mesh that isn't actively sent by the server.
+        for (const id of networkPlayers.keys()) {
+            if (!data.players[id] && id !== window.socket.id) {
+                scene.remove(networkPlayers.get(id));
+                networkPlayers.delete(id);
+                window.updatePlayerList();
+            }
+        }
+
         Object.keys(data.players).forEach(id => {
             if (id === window.socket.id || !networkPlayers.has(id)) return;
             const p = networkPlayers.get(id); const s = data.players[id];
@@ -252,7 +262,6 @@ if (window.io) {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
-    // ✨ THE UI FIX: Cleanly resets the game state instead of silently freezing
     window.socket.on('hostLeft', (msg) => { 
         document.getElementById('hud-layer').style.display = 'none';
         document.getElementById('pause-menu').style.display = 'none';
@@ -286,9 +295,18 @@ if (window.io) {
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
 
-const mPauseBtn = document.getElementById('m-pause');
-if (mPauseBtn) {
-    mPauseBtn.addEventListener('touchstart', (e) => {
+// ✨ THE FIX: Universal Pause Button Logic
+const univPauseBtn = document.getElementById('btn-univ-pause');
+if (univPauseBtn) {
+    univPauseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (player.gameActive && !player.isInvOpen) {
+            document.getElementById('pause-menu').style.display = 'flex';
+            player.gameActive = false;
+            if (!isMobile) player.controls.unlock();
+        }
+    });
+    univPauseBtn.addEventListener('touchstart', (e) => {
         e.preventDefault(); e.stopPropagation();
         if (player.gameActive && !player.isInvOpen) {
             document.getElementById('pause-menu').style.display = 'flex';
@@ -308,7 +326,6 @@ document.getElementById('btn-load-saved').addEventListener('click', () => {
 const closeSavedBtn = document.getElementById('close-saved');
 if(closeSavedBtn) closeSavedBtn.addEventListener('click', () => { document.getElementById('saved-browser').style.display = 'none'; });
 
-// ✨ THE FIX: We copy the player name so you can verify what you are saving under
 document.getElementById('btn-play-menu').addEventListener('click', () => {
     document.getElementById('host-playerName').value = document.getElementById('playerName').value;
     document.getElementById('main-menu').style.display = 'none';
@@ -329,7 +346,6 @@ document.getElementById('btn-create-world').addEventListener('click', (e) => {
 
     e.target.innerText = "Connecting..."; e.target.classList.add('disabled');
     
-    // ✨ THE FIX: Explicitly grabbing the name from the World Menu text box
     localPlayerName = document.getElementById('host-playerName').value.trim() || "Guest";
     const worldName = document.getElementById('world-name-input').value.trim() || "New World";
     
@@ -388,7 +404,7 @@ previewScene.add(new THREE.AmbientLight(0xffffff, 1.2)); const previewDirLight =
 const previewPlayer = new THREE.Group();
 const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt = new THREE.MeshLambertMaterial({color: 0x3333aa}); const matPants = new THREE.MeshLambertMaterial({color: 0x222255});
 const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); const legL = new Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
 const previewHeldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshLambertMaterial({color: 0xffffff})); armR.add(previewHeldBlock); previewPlayer.add(head, body, armL, armR, legL, legR); previewScene.add(previewPlayer);
 
 let isGeneratingWorld = false; let initialChunksNeeded = 0; let initialChunksDone = 0;
