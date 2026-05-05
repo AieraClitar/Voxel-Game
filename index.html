@@ -157,10 +157,7 @@
     <div id="world-menu" class="menu-screen" style="display: none;">
         <div class="menu-bg"></div>
         <h1 class="game-title">Create New World</h1>
-
-        <!-- ✨ THE FIX: We added a specific Player Name input here so it doesn't get lost! -->
         <input type="text" id="host-playerName" class="mc-input" placeholder="Your Player Name..." maxlength="15">
-        
         <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
         <input type="password" id="world-passcode" class="mc-input" placeholder="World Passcode (Required)">
 
@@ -183,6 +180,9 @@
     </div>
 
     <div id="hud-layer">
+        <!-- ✨ THE FIX: Universal Menu Button for Desktop and Mobile -->
+        <button id="btn-univ-pause" style="position: absolute; top: max(env(safe-area-inset-top), 15px); left: max(env(safe-area-inset-left), 15px); background: rgba(0,0,0,0.7); border: 2px solid #FFD700; color: #FFD700; border-radius: 8px; padding: 10px 15px; font-size: 16px; font-weight: bold; cursor: pointer; z-index: 900; pointer-events: auto;">⏸️ MENU</button>
+
         <div id="crosshair"></div>
         <div id="mining-ui"><div id="mining-progress"></div></div>
         <div id="time-ui"><div id="time-indicator">☀️</div></div>
@@ -198,8 +198,6 @@
         </div>
 
         <div id="mobile-controls">
-            <div class="m-btn" id="m-pause" style="top: max(env(safe-area-inset-top), 20px); left: max(env(safe-area-inset-left), 20px); width: 45px; height: 45px; font-size: 20px; z-index: 900;">⏸️</div>
-            
             <div id="m-look-zone"></div>
             <div id="m-joystick-zone"><div id="m-joystick-knob"></div></div>
             <div id="m-actions">
@@ -215,7 +213,7 @@
         <h3 style="margin-top: 0; margin-bottom: 10px; text-align: center; border-bottom: 1px solid #555; padding-bottom: 5px; font-size: 14px;">Online Players</h3>
         <ul id="playerList" style="list-style-type: none; padding: 0; margin: 0; font-size: 13px; display: flex; flex-direction: column; gap: 5px;"></ul>
     </div>
-    <button id="mobileTabBtn" style="display: none; position: absolute; top: max(env(safe-area-inset-top), 20px); right: env(safe-area-inset-right, 20px); width: 45px; height: 45px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; font-size: 20px; border: 2px solid rgba(255,255,255,0.5); z-index: 900; align-items: center; justify-content: center;">👥</button>
+    <button id="mobileTabBtn" style="display: none; position: absolute; top: max(env(safe-area-inset-top), 70px); right: env(safe-area-inset-right, 20px); width: 45px; height: 45px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; font-size: 20px; border: 2px solid rgba(255,255,255,0.5); z-index: 900; align-items: center; justify-content: center;">👥</button>
 
     <div id="dragged-item"></div>
     <div id="item-tooltip">ITEM</div>
