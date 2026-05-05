@@ -39,6 +39,7 @@ window.showChat = (msg) => {
 let localPlayerName = "Guest";
 let localRoomStartTime = Date.now() - (0.25 * 240 * 1000); 
 
+// ✨ THE FIX: Moved these to the top so the socket can access them instantly.
 let isGeneratingWorld = false; 
 let initialChunksNeeded = 0; 
 let initialChunksDone = 0;
@@ -63,7 +64,6 @@ if (window.io) {
         sprite.scale.set(2, 0.5, 1); sprite.position.y = 2.0; return sprite;
     }
 
-    // RED TREE FIX: Deep clone materials before attaching them to a network player
     function updateNetworkPlayerItem(group, itemType) {
         if (group.userData.heldItemType === itemType) return;
         group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); if (oldItem) armR.remove(oldItem);
@@ -72,9 +72,7 @@ if (window.io) {
             if (['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick', 'bow', 'crossbow', 'gun'].includes(itemType)) {
                 mesh = create3DWeapon(itemType); mesh.position.set(0, -0.75, 0); mesh.rotation.set(Math.PI / 2, 0, 0);
             } else {
-                const baseMat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
-                const mat = Array.isArray(baseMat) ? baseMat.map(m => m.clone()) : baseMat.clone();
-                
+                const mat = world.itemMaterials[itemType] || world.itemMaterials['stone'];
                 if (itemType === 'torch') {
                     mesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); mesh.geometry.translate(0, 0.2, 0); mesh.position.set(0, -0.75, -0.15); mesh.rotation.set(-Math.PI / 8, 0, 0); 
                 } else {
@@ -208,6 +206,7 @@ if (window.io) {
     });
 
     window.socket.on('server_tick', (data) => {
+        
         for (const id of networkPlayers.keys()) {
             if (!data.players[id] && id !== window.socket.id) {
                 scene.remove(networkPlayers.get(id));
@@ -411,6 +410,7 @@ const matSkin = new THREE.MeshLambertMaterial({color: 0xe0ac69}); const matShirt
 const headMaterials = [matSkin, matSkin, matSkin, matSkin, matSkin, new THREE.MeshLambertMaterial({ map: Textures.generate('archer_face') })]; 
 const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMaterials); head.position.set(0, 1.75, 0); const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.25), matShirt); body.position.set(0, 1.125, 0); const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armL.position.set(-0.425, 1.125, 0); const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matSkin); armR.position.set(0.425, 1.125, 0); 
 
+// ✨ THE FIX: Corrected "new Mesh" to "new THREE.Mesh" here to fix the crash
 const legL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legL.position.set(-0.15, 0.375, 0); 
 const legR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), matPants); legR.position.set(0.15, 0.375, 0);
 
@@ -429,8 +429,6 @@ window.addEventListener('resize', () => {
 
 const clock = new THREE.Clock(); let chunkTimer = 0; let dayTime = 0.25; let currentShadowFactor = 1.0; let currentCaveFactor = 1.0; 
 const daySky = new THREE.Color(0x60a5fa); const sunsetSky = new THREE.Color(0xf59e0b); const nightSky = new THREE.Color(0x0f172a); const caveColor = new THREE.Color(0x020617); const dayCloud = new THREE.Color(0xffffff); const sunsetCloud = new THREE.Color(0xfcb045); const nightCloud = new THREE.Color(0x1e293b); const currentSkyColor = new THREE.Color(); const currentCloudColor = new THREE.Color();
-
-let lastLiquidTime = 0;
 
 function animate() {
     requestAnimationFrame(animate);
@@ -459,7 +457,7 @@ function animate() {
 
     let hasRoof = false; let roofType = 'air';
     const bx = Math.round(player.camera.position.x); const bz = Math.round(player.camera.position.z); const by = Math.round(player.camera.position.y + 1.0); 
-    for (let y = by; y <= by + 50; y++) { const type = world.getBlockType(bx, y, bz); if (type !== 'air' && type !== 'water' && type !== 'lava' && type !== 'torch') { hasRoof = true; roofType = type; break; } }
+    for (let y = by; y <= by + 50; y++) { const type = world.getBlockType(bx, y, bz); if (type !== 'air' && type !== 'water' && type !== 'torch') { hasRoof = true; roofType = type; break; } }
     let targetShadowFactor = hasRoof ? (roofType === 'leaves' || roofType.includes('wood') ? 0.4 : 0.0) : 1.0; let targetCaveFactor = hasRoof && !roofType.includes('wood') && roofType !== 'leaves' ? 0.0 : 1.0;
     currentShadowFactor += (targetShadowFactor - currentShadowFactor) * delta * 3.0; currentCaveFactor += (targetCaveFactor - currentCaveFactor) * delta * 3.0;
 
@@ -481,19 +479,6 @@ function animate() {
 
     const selectedItem = player.inventory[player.selectedSlot]; handLight.intensity = (selectedItem && selectedItem.type === 'torch' && selectedItem.count > 0) ? 10 + (Math.random() * 2) : 0;
     if (handLight.intensity > 0) handLight.position.copy(player.camera.position);
-
-    const headBlock = world.getBlockType(Math.floor(px), Math.floor(player.camera.position.y), Math.floor(pz));
-    const feetBlock = world.getBlockType(Math.floor(px), Math.floor(player.camera.position.y - 1.5), Math.floor(pz));
-    if (performance.now() - lastLiquidTime > 1000) {
-        if (headBlock === 'lava' || feetBlock === 'lava') {
-            if(window.socket) window.socket.emit('requestPlayerDamage', { dmg: 10, source: 'lava' });
-            if(AudioSys && AudioSys.lavaBurn) AudioSys.lavaBurn();
-            lastLiquidTime = performance.now();
-        } else if ((headBlock === 'water' || feetBlock === 'water') && Math.abs(player.velocity.y) > 3) {
-            if(AudioSys && AudioSys.splash) AudioSys.splash();
-            lastLiquidTime = performance.now();
-        }
-    }
 
     player.update(delta); aiController.update(delta); world.updateDrops(delta); world.updateLights();
 

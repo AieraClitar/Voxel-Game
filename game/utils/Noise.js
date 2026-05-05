@@ -4,15 +4,14 @@ export class SimpleNoise {
     }
 
     random(x, z) {
+        // ✨ THE FIX: Deterministic sine wave hash. NO BITWISE MATH.
         const sin = Math.sin(Math.floor(x) * 12.9898 + Math.floor(z) * 78.233 + this.seed) * 43758.5453;
         return sin - Math.floor(sin);
     }
 
     getNoise(x, z) {
-        const intX = Math.floor(x); 
-        const intZ = Math.floor(z);
-        const fractX = x - intX; 
-        const fractZ = z - intZ;
+        const intX = Math.floor(x); const intZ = Math.floor(z);
+        const fractX = x - intX; const fractZ = z - intZ;
 
         const v1 = this.random(intX, intZ);
         const v2 = this.random(intX + 1, intZ);

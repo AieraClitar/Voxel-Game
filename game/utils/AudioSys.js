@@ -40,8 +40,6 @@ export const AudioSys = {
 
     stepGrass: function(dist = 0) { this.playNoise(0.15, this.getDistVol(dist, 0.05), 800); },
     stepStone: function(dist = 0) { this.playTone(60 + Math.random()*20, 'square', 0.1, this.getDistVol(dist, 0.05), 10); },
-    splash: function(dist = 0) { this.playNoise(0.4, this.getDistVol(dist, 0.15), 400); },
-    lavaBurn: function(dist = 0) { this.playNoise(0.5, this.getDistVol(dist, 0.2), 200); this.playTone(100, 'sawtooth', 0.5, this.getDistVol(dist, 0.1), 50); },
     hitFlesh: function(dist = 0) { this.playTone(150 + Math.random()*50, 'square', 0.15, this.getDistVol(dist, 0.2), 100); this.playNoise(0.1, this.getDistVol(dist, 0.1), 500); },
     breakBlock: function(dist = 0) { this.playTone(100 + Math.random()*40, 'triangle', 0.2, this.getDistVol(dist, 0.15), 50); this.playNoise(0.2, 0.1, 1000); },
     shootGun: function(dist = 0) { this.playNoise(0.3, this.getDistVol(dist, 0.3), 3000); this.playTone(100, 'sawtooth', 0.2, this.getDistVol(dist, 0.2), 80); },

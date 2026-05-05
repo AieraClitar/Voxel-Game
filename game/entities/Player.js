@@ -20,7 +20,7 @@ export class Player {
         this.health = 100; this.maxHealth = 100; this.aiController = null; this.shakeIntensity = 0; this.footstepTimer = 0;
         this.lastNetUpdate = 0;
 
-        this.inventory = [{ type: 'torch', count: 10 }, { type: 'wooden_sword', count: 1 }, { type: 'wooden_pickaxe', count: 1 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }];
+        this.inventory = [{ type: 'torch', count: 10 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }, { type: null, count: 0 }];
         this.mainInventory = Array.from({length: 16}, () => ({type: null, count: 0}));
         this.craftingGrid = Array.from({length: 9}, () => ({type: null, count: 0}));
         this.craftingResult = { type: null, count: 0 }; this.isCraftingTableOpen = false;
@@ -108,8 +108,7 @@ export class Player {
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
-            // VOID FALL FIX: Drop from sky instead of querying ungenerated surface height
-            this.camera.position.set(16, 120, 16); this.velocity.set(0,0,0);
+            this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
         }
     }
@@ -326,9 +325,10 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
+                // ✨ FIX: Attach to the palm (Y=0.4), NOT the elbow (Y=-0.3). Tilt forward to counter the arm angle.
                 mesh1st = create3DWeapon(selected.type); 
                 mesh1st.position.set(0, 0.4, -0.1); 
-                mesh1st.rotation.set(Math.PI / 2.5, 0, 0); 
+                mesh1st.rotation.set(Math.PI / 2, 0, 0); 
                 
                 mesh3rd = create3DWeapon(selected.type); 
                 mesh3rd.position.set(0, -0.75, 0); 
@@ -342,6 +342,7 @@ export class Player {
                 mesh3rd.position.set(0, -0.75, -0.15); 
                 mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
+                // ✨ FIX: Attach blocks to the palm (Y=0.4) so they don't clip into your body
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
                 mesh1st.position.set(0, 0.4, -0.1); 
                 mesh1st.rotation.set(0, Math.PI / 4, 0); 
@@ -389,17 +390,10 @@ export class Player {
         if (this.aiController) { for (const mob of this.aiController.mobs.values()) rayTargets.push(mob.mesh); }
         const intersects = this.raycaster.intersectObjects(rayTargets, true);
 
-        // WATER MINING FIX: Explicitly ignore liquids in the raycast
-        let validIntersect = null;
         for (let intersect of intersects) {
-            if (intersect.distance > 6.0) break;
-            
             let bx, by, bz;
-            if (intersect.object.isInstancedMesh) { 
-                const pos = intersect.object.userData.positions[intersect.instanceId]; 
-                if (!pos) continue; 
-                bx = pos.x; by = pos.y; bz = pos.z; 
-            } else if (intersect.object.userData && intersect.object.userData.isMob) {
+            if (intersect.object.isInstancedMesh) { const pos = intersect.object.userData.positions[intersect.instanceId]; if (!pos) continue; bx = pos.x; by = pos.y; bz = pos.z; } 
+            else if (intersect.object.userData && intersect.object.userData.isMob) {
                 if (intersect.distance > 3.0 && tool !== 'gun' && tool !== 'bow' && tool !== 'crossbow') continue; 
                 if (buttonIdx === 0) { 
                     let hitMob = intersect.object.userData.mobRef; let dmg = 5; 
@@ -413,58 +407,42 @@ export class Player {
                     this.shakeIntensity = 0.3; 
                 }
                 return; 
-            } else { 
-                continue; 
-            }
+            } else { continue; }
 
+            if (intersect.distance > 6.0) break;
             const type = this.world.getBlockType(bx, by, bz);
-            
-            if (type === 'water' || type === 'lava') continue;
 
-            validIntersect = { intersect, bx, by, bz, type };
-            break;
-        }
+            if (buttonIdx === 0) { 
+                if (type === 'bedrock') break;
 
-        if (!validIntersect) return;
-        const { intersect, bx, by, bz, type } = validIntersect;
+                this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
+                let speedMult = 1.0;
+                if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
+                if (tool === 'wooden_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 3.0;
+                if (tool === 'stone_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 6.0;
+                if (tool === 'wooden_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 3.0;
+                if (tool === 'stone_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 6.0;
 
-        if (buttonIdx === 0) { 
-            if (type === 'bedrock') return;
-
-            this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
-            let speedMult = 1.0;
-            if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
-            if (tool === 'wooden_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 3.0;
-            if (tool === 'stone_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 6.0;
-            if (tool === 'wooden_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 3.0;
-            if (tool === 'stone_shovel' && (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow')) speedMult = 6.0;
-
-            if (type === 'stone') this.miningDurability = 1.5 / speedMult; 
-            else if (type.includes('wood') || type.includes('planks') || type === 'crafting_table') this.miningDurability = 1.0 / speedMult;
-            else if (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow') this.miningDurability = 0.5 / speedMult;
-            else if (type === 'leaves') this.miningDurability = 0.2; else this.miningDurability = 0.5; 
-            
-            document.getElementById('mining-ui').style.display = 'block'; 
-        } else if (buttonIdx === 2) { 
-            if (type === 'crafting_table') { this.isCraftingTableOpen = true; this.toggleInventory(); return; }
-            const selected = this.inventory[this.selectedSlot];
-            if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
+                if (type === 'stone') this.miningDurability = 1.5 / speedMult; 
+                else if (type.includes('wood') || type.includes('planks') || type === 'crafting_table') this.miningDurability = 1.0 / speedMult;
+                else if (type === 'dirt' || type === 'grass' || type === 'sand' || type === 'snow') this.miningDurability = 0.5 / speedMult;
+                else if (type === 'leaves') this.miningDurability = 0.2; else this.miningDurability = 0.5; 
                 
-                if (selected.type === 'torch') {
-                    if (type === 'leaves' || type === 'air' || type === 'water' || type === 'lava' || type === 'torch') return; 
+                document.getElementById('mining-ui').style.display = 'block'; break;
+            } else if (buttonIdx === 2) { 
+                if (type === 'crafting_table') { this.isCraftingTableOpen = true; this.toggleInventory(); break; }
+                const selected = this.inventory[this.selectedSlot];
+                if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
+                    if (selected.type === 'torch' && type === 'leaves') break; if (type === 'torch') break; 
+                    const normal = intersect.face.normal.clone();
+                    let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
+                    
+                    this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
+                    if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
+                    
+                    selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
                 }
-
-                const normal = intersect.face.normal.clone();
-                let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
-                
-                if (nx === Math.floor(this.camera.position.x) && nz === Math.floor(this.camera.position.z)) {
-                    if (ny === Math.floor(this.camera.position.y) || ny === Math.floor(this.camera.position.y - 1)) return;
-                }
-
-                this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
-                if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
-                
-                selected.count--; this.updateInventoryUI(); if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass();
+                break;
             }
         }
     }
@@ -474,48 +452,18 @@ export class Player {
     checkCollision(x, y, z) {
         const radius = 0.25; const feetY = y - 1.5; const headY = y + 0.2;
         const pMinX = Math.floor(x - radius + 0.5); const pMaxX = Math.floor(x + radius + 0.5); const pMinY = Math.floor(feetY + 0.5); const pMaxY = Math.floor(headY + 0.5); const pMinZ = Math.floor(z - radius + 0.5); const pMaxZ = Math.floor(z + radius + 0.5);
-        for (let bx = pMinX; bx <= pMaxX; bx++) { 
-            for (let by = pMinY; by <= pMaxY; by++) { 
-                for (let bz = pMinZ; bz <= pMaxZ; bz++) { 
-                    const type = this.world.getBlockType(bx, by, bz); 
-                    if (type !== 'air' && type !== 'water' && type !== 'lava' && type !== 'torch') { 
-                        if (feetY < by + 0.5 && headY > by - 0.5) return true; 
-                    } 
-                } 
-            } 
-        }
+        for (let bx = pMinX; bx <= pMaxX; bx++) { for (let by = pMinY; by <= pMaxY; by++) { for (let bz = pMinZ; bz <= pMaxZ; bz++) { const type = this.world.getBlockType(bx, by, bz); if (type !== 'air' && type !== 'water' && type !== 'torch') { if (feetY < by + 0.5 && headY > by - 0.5) return true; } } } }
         return false;
     }
 
     update(delta) {
         if (!this.gameActive) return;
 
-        // VOID FALL FIX: Suspend gravity if the chunk isn't loaded
-        const currentChunkX = Math.floor(this.camera.position.x / 16);
-        const currentChunkZ = Math.floor(this.camera.position.z / 16);
-        if (!this.world.chunkMeshState.has(`${currentChunkX},${currentChunkZ}`)) {
-            this.velocity.y = 0; 
-            return; 
-        }
-
-        const blockAtFeet = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.5), Math.floor(this.camera.position.z));
-        const blockAtHead = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
-        const blockBelow = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z));
-        
-        let inLiquid = (blockAtFeet === 'water' || blockAtFeet === 'lava' || blockAtHead === 'water' || blockAtHead === 'lava');
-        let onIce = (blockBelow === 'ice');
-        
         let targetX, targetZ;
-        let currentSpeed = this.speed;
-        if (inLiquid) currentSpeed *= 0.5;
-
-        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * currentSpeed; targetZ = -this.joyMove.y * currentSpeed; } 
-        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * currentSpeed; targetZ = this._input.z * currentSpeed; }
+        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * this.speed; targetZ = -this.joyMove.y * this.speed; } 
+        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * this.speed; targetZ = this._input.z * this.speed; }
         
-        let friction = onIce ? 2.0 : 10.0;
-        this.velocity.x += (targetX - this.velocity.x) * friction * delta; 
-        this.velocity.z += (targetZ - this.velocity.z) * friction * delta;
-
+        this.velocity.x += (targetX - this.velocity.x) * 10 * delta; this.velocity.z += (targetZ - this.velocity.z) * 10 * delta;
         this._direction.set(1, 0, 0).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
         let dxRight = this._direction.x * this.velocity.x * delta; let dzRight = this._direction.z * this.velocity.x * delta;
         this._direction.set(0, 0, -1).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
@@ -524,16 +472,7 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        if (inLiquid) {
-            this.velocity.y -= (this.gravity * 0.15) * delta; 
-            if (this.moveForward || this.canJump || (this.isMobile && this.joyMove.y > 0.5)) {
-                this.velocity.y += 12.0 * delta; 
-            }
-        } else {
-            this.velocity.y -= this.gravity * delta; 
-        }
-
-        const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
+        this.velocity.y -= this.gravity * delta; const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
         for (let i = 0; i < ySteps; i++) {
             this.camera.position.y += yStepAmt;
             if (this.velocity.y < 0) { if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { let highestBlockY = Math.floor(this.camera.position.y - 1.5 + 0.5); this.camera.position.y = highestBlockY + 0.5 + 1.5; this.velocity.y = 0; this.canJump = true; break; } else { this.canJump = false; } } 
@@ -543,24 +482,11 @@ export class Player {
         const horizSpeed = Math.sqrt(this.velocity.x**2 + this.velocity.z**2);
         if (this.canJump && horizSpeed > 1) { this.footstepTimer += delta; if (this.footstepTimer > 0.35) { let floorType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z)); if(floorType === 'stone' || floorType === 'bedrock') { if(AudioSys && AudioSys.stepStone) AudioSys.stepStone(); } else { if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass(); } this.footstepTimer = 0; } }
 
-        // PHANTOM DROP FIX: Check inventory capacity before picking up items
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
             if (drop.pickupDelay <= 0 && this.camera.position.distanceTo(drop.mesh.position) < 1.8) { 
-                if (window.socket && !drop.isBeingPickedUp) {
-                    let hasSpace = false;
-                    const limit = this.getStackLimit(drop.type);
-                    for (let invSlot of [...this.inventory, ...this.mainInventory]) {
-                        if ((invSlot.type === drop.type && invSlot.count < limit) || invSlot.count === 0) {
-                            hasSpace = true; break;
-                        }
-                    }
-
-                    if (hasSpace) {
-                        drop.isBeingPickedUp = true; 
-                        drop.mesh.visible = false; 
-                        window.socket.emit('requestPickup', drop.id);
-                    }
+                if(window.socket && !drop.isBeingPickedUp) {
+                    drop.isBeingPickedUp = true; drop.mesh.visible = false; window.socket.emit('requestPickup', drop.id);
                 }
             }
         }
@@ -577,25 +503,10 @@ export class Player {
 
         let pitch = this._euler.x; this.head.rotation.x = pitch; let targetFPSArmX = -Math.PI / 4;
 
-        let tool = this.inventory[this.selectedSlot].type || '';
         if (this.attackAnimTimer > 0) {
-            this.attackAnimTimer -= delta; 
-            let strike = Math.sin((1.0 - (this.attackAnimTimer / 0.25)) * Math.PI) * 1.5;
-            
-            if (tool.includes('sword')) {
-                targetFPSArmX = -Math.PI / 4;
-                this.arm.rotation.z = -strike;
-                targetArmRX = pitch + strike * 0.5;
-            } else if (tool === 'gun' || tool === 'crossbow') {
-                targetFPSArmX = -Math.PI / 4 + (strike * 0.2);
-                targetArmRX = pitch + (strike * 0.2); 
-            } else {
-                targetFPSArmX = -Math.PI / 4 + strike; 
-                this.arm.rotation.z = 0;
-                targetArmRX = pitch + strike; 
-            }
+            this.attackAnimTimer -= delta; let strike = Math.sin((1.0 - (this.attackAnimTimer / 0.25)) * Math.PI) * 1.5;
+            targetFPSArmX = -Math.PI / 4 + strike; targetArmRX = pitch + strike; 
         } else if (this.isMining) {
-            this.arm.rotation.z = 0;
             let mine = Math.abs(Math.sin(performance.now() * 0.015)) * 0.5; targetFPSArmX = -Math.PI / 4 + mine; targetArmRX = pitch + mine;
             this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera); let rayTargets = []; for (const chunkGroup of this.world.chunks.values()) rayTargets.push(chunkGroup);
             const intersects = this.raycaster.intersectObjects(rayTargets, true);
@@ -619,8 +530,6 @@ export class Player {
                 break;
             }
             if (!stillLookingAtTarget) this.stopMining();
-        } else {
-            this.arm.rotation.z = 0;
         }
 
         this.arm.rotation.x = THREE.MathUtils.lerp(this.arm.rotation.x, targetFPSArmX, 15 * delta); this.armR_3rd.rotation.x = THREE.MathUtils.lerp(this.armR_3rd.rotation.x, targetArmRX, 15 * delta); this.armL.rotation.x = THREE.MathUtils.lerp(this.armL.rotation.x, targetArmLX, 15 * delta); this.legR.rotation.x = THREE.MathUtils.lerp(this.legR.rotation.x, targetLegRX, 15 * delta); this.legL.rotation.x = THREE.MathUtils.lerp(this.legL.rotation.x, targetLegLX, 15 * delta);
