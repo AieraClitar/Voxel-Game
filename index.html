@@ -157,8 +157,11 @@
     <div id="world-menu" class="menu-screen" style="display: none;">
         <div class="menu-bg"></div>
         <h1 class="game-title">Create New World</h1>
-        <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
+
+        <!-- ✨ THE FIX: We added a specific Player Name input here so it doesn't get lost! -->
+        <input type="text" id="host-playerName" class="mc-input" placeholder="Your Player Name..." maxlength="15">
         
+        <input type="text" id="world-name-input" class="mc-input" placeholder="World Name..." value="New World">
         <input type="password" id="world-passcode" class="mc-input" placeholder="World Passcode (Required)">
 
         <button id="btn-create-world" class="mc-btn">Create / Play</button>
@@ -195,7 +198,6 @@
         </div>
 
         <div id="mobile-controls">
-            <!-- ✨ MOBILE PAUSE BUTTON -->
             <div class="m-btn" id="m-pause" style="top: max(env(safe-area-inset-top), 20px); left: max(env(safe-area-inset-left), 20px); width: 45px; height: 45px; font-size: 20px; z-index: 900;">⏸️</div>
             
             <div id="m-look-zone"></div>
