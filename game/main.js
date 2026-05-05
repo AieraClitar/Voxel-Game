@@ -128,7 +128,6 @@ if (window.io) {
             
             const hostBtn = document.createElement('button'); hostBtn.innerText = 'Host World'; hostBtn.className = 'mc-btn';
             hostBtn.onclick = () => {
-                // ✨ UI FIX: Auto-fills the world name so they can just enter the passcode
                 document.getElementById('world-name-input').value = worldName;
                 document.getElementById('world-passcode').value = "";
                 document.getElementById('saved-browser').style.display = 'none';
@@ -139,14 +138,20 @@ if (window.io) {
         });
     });
 
-    // ✨ UI FIX: Listen for Host Passcode errors
     window.socket.on('hostError', (msg) => { 
         alert(msg); 
         const btn = document.getElementById('btn-create-world');
         if (btn) { btn.innerText = "Create / Play"; btn.classList.remove('disabled'); }
     });
 
-    window.socket.on('joinError', (msg) => { alert(msg); location.reload(); });
+    // ✨ UI FIX: Replaces blocked alerts with clean DOM resets to main menu
+    window.socket.on('joinError', (msg) => { 
+        alert(msg); 
+        document.getElementById('hud-layer').style.display = 'none';
+        document.getElementById('main-menu').style.display = 'flex';
+        player.gameActive = false;
+        setTimeout(() => location.reload(), 1000); 
+    });
 
     window.socket.on('restore_player_data', (data) => {
         player.camera.position.set(data.x, data.y, data.z);
@@ -242,7 +247,6 @@ if (window.io) {
     window.socket.on('mobShoot', (data) => { aiController.shootProjectile(new THREE.Vector3(data.from.x, data.from.y, data.from.z), new THREE.Vector3(data.to.x, data.to.y, data.to.z), data.type); });
     window.socket.on('mobDamaged', (data) => { aiController.damageMobLocal(data.id, data.kbDir); });
     
-    // ✨ KILL MESSAGE FIX: Receives the formatted killerName string directly from the server
     window.socket.on('mobKilled', (data) => { 
         aiController.killMobLocal(data.mobId); 
         if (data.killerName) window.showChat(data.killerName); 
@@ -254,9 +258,24 @@ if (window.io) {
         if(networkPlayers.has(id)) { window.showChat(`👋 ${networkPlayers.get(id).userData.playerName} left.`); scene.remove(networkPlayers.get(id)); networkPlayers.delete(id); window.updatePlayerList(); }
     });
 
+    // ✨ UI FIX: Forcefully kicks joiners to main menu when host exits instead of silently freezing
     window.socket.on('hostLeft', (msg) => { 
-        alert(msg || "The Host has left the world."); 
-        location.reload(); 
+        document.getElementById('hud-layer').style.display = 'none';
+        document.getElementById('pause-menu').style.display = 'none';
+        player.gameActive = false;
+        
+        const mm = document.getElementById('main-menu');
+        mm.style.display = 'flex';
+        mm.innerHTML = `
+            <div style="background:rgba(0,0,0,0.95); padding:40px; border-radius:16px; text-align:center; border: 2px solid #ff4444; width: 80vw; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+                <h2 style="color:#ff4444; margin-top:0; font-family: monospace;">CONNECTION LOST</h2>
+                <p style="color:white; font-size: 18px; margin-bottom: 30px;">${msg || "The Host has left the world."}</p>
+                <button class="mc-btn" onclick="location.reload()">Return to Menu</button>
+            </div>
+        `;
+        
+        if (!isMobile) player.controls.unlock();
+        if(window.socket) window.socket.disconnect(); // Hard cut the cord so they don't stay in the ghost room
     });
     
     window.socket.on('blockUpdate', (data) => { 
@@ -272,6 +291,19 @@ if (window.io) {
         } 
     });
 } else { console.warn("Socket.io not found! Multiplayer is disabled."); }
+
+// ✨ MOBILE PAUSE BUTTON LISTENER
+const mPauseBtn = document.getElementById('m-pause');
+if (mPauseBtn) {
+    mPauseBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (player.gameActive && !player.isInvOpen) {
+            document.getElementById('pause-menu').style.display = 'flex';
+            player.gameActive = false;
+        }
+    }, {passive: false});
+}
+
 
 document.getElementById('btn-multiplayer').addEventListener('click', () => { document.getElementById('lobby-browser').style.display = 'block'; });
 const closeLobbyBtn = document.getElementById('close-lobby');
@@ -295,7 +327,6 @@ document.getElementById('btn-back-menu').addEventListener('click', () => {
     document.getElementById('main-menu').style.display = 'flex';
 });
 
-// ✨ THE FIX: Validates and sends passcode on host attempt
 document.getElementById('btn-create-world').addEventListener('click', (e) => {
     const passcode = document.getElementById('world-passcode').value.trim();
     if (!passcode) {
@@ -322,7 +353,6 @@ document.getElementById('btn-save-exit').addEventListener('click', () => {
             z: player.camera.position.z,
             health: player.health
         });
-        // The server will instantly kick us via 'hostLeft', no need for setTimeouts
     }
 });
 
