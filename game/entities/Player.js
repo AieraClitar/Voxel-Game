@@ -108,8 +108,6 @@ export class Player {
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
-            const rx = 16 + (Math.random() * 10 - 5); const rz = 16 + (Math.random() * 10 - 5);
-            this.camera.position.set(rx, this.world.getSurfaceHeight(rx, rz) + 4, rz); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
         }
     }
@@ -456,6 +454,14 @@ export class Player {
         const radius = 0.25; const feetY = y - 1.5; const headY = y + 0.2;
         const pMinX = Math.floor(x - radius + 0.5); const pMaxX = Math.floor(x + radius + 0.5); const pMinY = Math.floor(feetY + 0.5); const pMaxY = Math.floor(headY + 0.5); const pMinZ = Math.floor(z - radius + 0.5); const pMaxZ = Math.floor(z + radius + 0.5);
         for (let bx = pMinX; bx <= pMaxX; bx++) { for (let by = pMinY; by <= pMaxY; by++) { for (let bz = pMinZ; bz <= pMaxZ; bz++) { const type = this.world.getBlockType(bx, by, bz); if (type !== 'air' && type !== 'water' && type !== 'torch') { if (feetY < by + 0.5 && headY > by - 0.5) return true; } } } }
+        
+        if (this.aiController) {
+            for (const [id, mob] of this.aiController.mobs) {
+                if (mob.health <= 0 || !mob.mesh) continue;
+                const mx = mob.mesh.position.x, my = mob.mesh.position.y, mz = mob.mesh.position.z;
+                if (Math.abs(x - mx) < 0.6 && Math.abs(z - mz) < 0.6 && feetY < my + 1.8 && headY > my) return true;
+            }
+        }
         return false;
     }
 
@@ -475,13 +481,15 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        this.inWater = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.0), Math.floor(this.camera.position.z)) === 'water' || 
-                       this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z)) === 'water';
+        let headInWater = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z)) === 'water';
+        let feetInWater = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.4), Math.floor(this.camera.position.z)) === 'water';
+        this.inWater = headInWater || feetInWater;
         
         if (this.inWater) {
-            this.velocity.y -= this.gravity * 0.2 * delta;
-            if (this.velocity.y < -4) this.velocity.y = -4; 
+            this.velocity.y -= this.gravity * 0.05 * delta;
+            if (this.velocity.y < -2) this.velocity.y = -2; 
             this.speed = 2.5;
+            if (this._input.y > 0 || (this.isMobile && this.joyMove.y > 0.5)) { this.velocity.y = 3; } 
         } else {
             this.velocity.y -= this.gravity * delta; 
             this.speed = 5.0;
