@@ -190,10 +190,7 @@ if (window.io) {
         player.world = world; aiController.world = world;
         
         Object.keys(data.players).forEach(id => {
-            if(id === window.socket.id) {
-                player.camera.position.set(data.players[id].x, data.players[id].y, data.players[id].z);
-                return;
-            }
+            if(id === window.socket.id) return;
             const mesh = createNetworkPlayer(data.players[id].name);
             mesh.position.set(data.players[id].x, data.players[id].y, data.players[id].z);
             mesh.userData.targetPos.copy(mesh.position);
@@ -441,7 +438,10 @@ function animate() {
         while (world.chunkQueue.length > 0 && performance.now() - startTime < 16) { world.processChunkQueue(); initialChunksDone++; }
         document.getElementById('loading-progress').style.width = `${(initialChunksDone / initialChunksNeeded) * 100}%`;
         if (world.chunkQueue.length === 0) {
-            isGeneratingWorld = false; 
+            isGeneratingWorld = false; let spawnY = world.getSurfaceHeight(16, 16) + 2;
+            if (player.velocity.x === 0 && player.velocity.z === 0) {
+                player.camera.position.set(16, spawnY, 16);
+            }
             player.velocity.set(0,0,0);
             document.getElementById('loading-screen').style.display = 'none'; document.getElementById('hud-layer').style.display = 'block';
             player.gameActive = true; if (!isMobile) player.controls.lock();
@@ -481,9 +481,6 @@ function animate() {
     if (handLight.intensity > 0) handLight.position.copy(player.camera.position);
 
     player.update(delta); aiController.update(delta); world.updateDrops(delta); world.updateLights();
-
-    if (world.materials[8] && world.materials[8].map) { world.materials[8].map.offset.x += 0.2 * delta; world.materials[8].map.offset.y += 0.2 * delta; }
-    if (world.materials[17] && world.materials[17].map) { world.materials[17].map.offset.x += 0.1 * delta; world.materials[17].map.offset.y += 0.1 * delta; }
 
     networkPlayers.forEach(p => {
         p.position.lerp(p.userData.targetPos, 15 * delta); 

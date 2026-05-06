@@ -27,83 +27,13 @@ export class World {
         
         const toolMat = (texName) => new THREE.MeshLambertMaterial({ map: Textures.generate(texName), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
 
-        const applyTriplanar = (material, scale = 0.25) => {
-            material.onBeforeCompile = (shader) => {
-                shader.vertexShader = shader.vertexShader.replace(
-                    '#include <common>',
-                    `#include <common>
-                    varying vec3 vWorldPos;`
-                );
-                shader.vertexShader = shader.vertexShader.replace(
-                    '#include <worldpos_vertex>',
-                    `#include <worldpos_vertex>
-                    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-                    #ifdef USE_INSTANCING
-                        vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
-                    #endif`
-                );
-                shader.fragmentShader = shader.fragmentShader.replace(
-                    '#include <common>',
-                    `#include <common>
-                    varying vec3 vWorldPos;`
-                );
-                shader.fragmentShader = shader.fragmentShader.replace(
-                    '#include <map_fragment>',
-                    `
-                    #ifdef USE_MAP
-                        vec3 blending = abs(vNormal);
-                        blending = normalize(max(blending, 0.00001));
-                        float b = (blending.x + blending.y + blending.z);
-                        blending /= vec3(b, b, b);
-                        
-                        vec4 xaxis = texture2D( map, vWorldPos.yz * ${scale} );
-                        vec4 yaxis = texture2D( map, vWorldPos.xz * ${scale} );
-                        vec4 zaxis = texture2D( map, vWorldPos.xy * ${scale} );
-                        
-                        vec4 texelColor = xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
-                        diffuseColor *= texelColor;
-                    #endif
-                    `
-                );
-            };
-            return material;
-        };
-
-        const applyWaterShader = (material) => {
-            material.onBeforeCompile = (shader) => {
-                shader.vertexShader = shader.vertexShader.replace(
-                    '#include <common>',
-                    `#include <common>\n varying vec3 vObjNormal;`
-                );
-                shader.vertexShader = shader.vertexShader.replace(
-                    '#include <beginnormal_vertex>',
-                    `#include <beginnormal_vertex>\n vObjNormal = objectNormal;`
-                );
-                shader.fragmentShader = shader.fragmentShader.replace(
-                    '#include <common>',
-                    `#include <common>\n varying vec3 vObjNormal;`
-                );
-                shader.fragmentShader = shader.fragmentShader.replace(
-                    '#include <dithering_fragment>',
-                    `#include <dithering_fragment>\n if (abs(vObjNormal.y) < 0.5) discard;`
-                );
-            };
-            return material;
-        };
-
         this.materials = {
-            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 
-            2: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('stone') })), 
-            3: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') })), 
-            4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') })), applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') })), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
-            5: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('sand') })), 
-            6: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('snow') })), 
-            7: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 })), 
-            8: applyWaterShader(new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.6 })), 
+            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
+            4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
+            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }), 
             9: [ new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }) ],
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
-            11: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 })), 
-            12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
+            11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
             13: [ new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }) ],
             14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') })
         };
