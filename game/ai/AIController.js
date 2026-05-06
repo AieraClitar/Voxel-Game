@@ -9,7 +9,10 @@ export function create3DWeapon(type) {
     const brownMat = new THREE.MeshLambertMaterial({color: 0x5c4033}); const grayMat = new THREE.MeshLambertMaterial({color: 0x7f8c8d}); const woodMat = new THREE.MeshLambertMaterial({color: 0x8b5a2b});
     const headMat = (type.includes('stone') || type === 'gun') ? grayMat : woodMat;
 
-    if (type.includes('sword')) {
+    if (type === 'stick') {
+        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.04), brownMat); handle.position.y = 0.2;
+        group.add(handle);
+    } else if (type.includes('sword')) {
         const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), brownMat); handle.position.y = 0.1;
         const guard = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.04), brownMat); guard.position.y = 0.22;
         const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.02), headMat); blade.position.y = 0.49;

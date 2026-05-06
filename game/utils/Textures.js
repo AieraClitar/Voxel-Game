@@ -12,7 +12,8 @@ export const Textures = {
         
         // Simple seeded random for consistent pixel noise
         let seed = 1;
-        for (let i = 0; i < type.length; i++) seed += type.charCodeAt(i);
+        const typeStr = type || 'unknown';
+        for (let i = 0; i < typeStr.length; i++) seed += typeStr.charCodeAt(i);
         const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
         
         const crispNoise = (r, g, b, variance) => {
