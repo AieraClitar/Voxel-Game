@@ -10,23 +10,33 @@ export const Textures = {
 
         const fillBase = (hex) => { ctx.fillStyle = hex; ctx.fillRect(0, 0, canvas.width, canvas.height); };
         const addNoise = (variance, opacity = 1) => {
-            ctx.globalAlpha = opacity;
             const w = canvas.width;
-            for(let x=0; x<w; x++) { for(let y=0; y<w; y++) { let v = (Math.random() - 0.5) * variance; ctx.fillStyle = `rgb(${128+v},${128+v},${128+v})`; ctx.globalCompositeOperation = 'overlay'; ctx.fillRect(x, y, 1, 1); } }
-            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            const imgData = ctx.getImageData(0, 0, w, w);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                let v = (Math.random() - 0.5) * variance;
+                data[i] = Math.min(255, Math.max(0, data[i] + v * opacity));
+                data[i+1] = Math.min(255, Math.max(0, data[i+1] + v * opacity));
+                data[i+2] = Math.min(255, Math.max(0, data[i+2] + v * opacity));
+            }
+            ctx.putImageData(imgData, 0, 0);
         };
         const addSmoothNoise = (variance, opacity = 1, scale = 4) => {
             const w = canvas.width;
             const offscreen = document.createElement('canvas');
-            offscreen.width = w / scale; offscreen.height = w / scale;
+            const sw = Math.ceil(w / scale);
+            offscreen.width = sw; offscreen.height = sw;
             const oCtx = offscreen.getContext('2d');
-            for(let x=0; x<offscreen.width; x++) {
-                for(let y=0; y<offscreen.height; y++) {
-                    let v = (Math.random() - 0.5) * variance;
-                    oCtx.fillStyle = `rgb(${128+v},${128+v},${128+v})`;
-                    oCtx.fillRect(x, y, 1, 1);
-                }
+            const imgData = oCtx.createImageData(sw, sw);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                let v = (Math.random() - 0.5) * variance;
+                data[i] = 128 + v;
+                data[i+1] = 128 + v;
+                data[i+2] = 128 + v;
+                data[i+3] = 255;
             }
+            oCtx.putImageData(imgData, 0, 0);
             ctx.globalAlpha = opacity;
             ctx.globalCompositeOperation = 'overlay';
             ctx.drawImage(offscreen, 0, 0, w, w);
