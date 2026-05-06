@@ -482,6 +482,9 @@ function animate() {
 
     player.update(delta); aiController.update(delta); world.updateDrops(delta); world.updateLights();
 
+    if (world.fluidMaterial && world.fluidMaterial.map) { world.fluidMaterial.map.offset.x += 0.2 * delta; world.fluidMaterial.map.offset.y += 0.2 * delta; }
+    if (world.lavaMaterial && world.lavaMaterial.map) { world.lavaMaterial.map.offset.x += 0.1 * delta; world.lavaMaterial.map.offset.y += 0.1 * delta; }
+
     networkPlayers.forEach(p => {
         p.position.lerp(p.userData.targetPos, 15 * delta); 
         p.rotation.y = THREE.MathUtils.lerp(p.rotation.y, p.userData.targetRy, 15 * delta);

@@ -117,7 +117,7 @@ export class Player {
         document.addEventListener('keydown', (e) => {
             if (e.code === 'F5') { e.preventDefault(); this.cameraMode = (this.cameraMode + 1) % 3; return; }
             if (e.code === 'KeyQ') { e.preventDefault(); this.dropSelectedItem(); return; } 
-            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break; case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
+            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': { let ft = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y-1.5), Math.floor(this.camera.position.z)); if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } else if(ft === 'water' || ft === 'lava') { this.velocity.y = 4.0; } break; } case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
         });
         document.addEventListener('keyup', (e) => { switch(e.code){ case 'KeyW': this.moveForward = false; break; case 'KeyA': this.moveLeft = false; break; case 'KeyS': this.moveBackward = false; break; case 'KeyD': this.moveRight = false; break; } });
         document.addEventListener('mousedown', (e) => { if(this.controls.isLocked) this.onInteract(e.button); });
@@ -135,7 +135,7 @@ export class Player {
         }
 
         const bindTouch = (id, startCb) => { const el = document.getElementById(id); if(el) el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); startCb(); }, {passive: false}); };
-        bindTouch('m-jump', () => { if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } }); bindTouch('m-inv', () => this.toggleInventory()); bindTouch('m-place', () => { if(this.gameActive) this.onInteract(2); }); bindTouch('m-drop', () => { this.dropSelectedItem(); }); 
+        bindTouch('m-jump', () => { let ft = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y-1.5), Math.floor(this.camera.position.z)); if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } else if(ft === 'water' || ft === 'lava') { this.velocity.y = 4.0; } }); bindTouch('m-inv', () => this.toggleInventory()); bindTouch('m-place', () => { if(this.gameActive) this.onInteract(2); }); bindTouch('m-drop', () => { this.dropSelectedItem(); }); 
 
         const lookZone = document.getElementById('m-look-zone'); let lookTouchId = null; let lastTouchX = 0; let lastTouchY = 0; let touchStartTime = 0; let isSwiping = false;
         if (lookZone) {
@@ -413,7 +413,7 @@ export class Player {
             const type = this.world.getBlockType(bx, by, bz);
 
             if (buttonIdx === 0) { 
-                if (type === 'bedrock') break;
+                if (type === 'bedrock' || type === 'water' || type === 'lava') break;
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
                 let speedMult = 1.0;
@@ -435,7 +435,10 @@ export class Player {
                 if (selected && selected.type !== null && selected.count > 0 && !['stick', 'bow', 'crossbow', 'gun', 'wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel'].includes(selected.type)) {
                     if (selected.type === 'torch' && type === 'leaves') break; if (type === 'torch') break; 
                     const normal = intersect.face.normal.clone();
+                    if (selected.type === 'torch' && Math.round(normal.y) === -1) break;
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
+                    const nBlock = this.world.getBlockType(nx, ny, nz);
+                    if (nBlock !== 'air' && nBlock !== 'water' && nBlock !== 'lava') break;
                     
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
@@ -463,7 +466,12 @@ export class Player {
         if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * this.speed; targetZ = -this.joyMove.y * this.speed; } 
         else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * this.speed; targetZ = this._input.z * this.speed; }
         
-        this.velocity.x += (targetX - this.velocity.x) * 10 * delta; this.velocity.z += (targetZ - this.velocity.z) * 10 * delta;
+        let feetType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.5), Math.floor(this.camera.position.z));
+        let inFluid = feetType === 'water' || feetType === 'lava';
+        let onIce = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z)) === 'ice';
+        
+        let friction = onIce ? 2 : (inFluid ? 5 : 10);
+        this.velocity.x += (targetX - this.velocity.x) * friction * delta; this.velocity.z += (targetZ - this.velocity.z) * friction * delta;
         this._direction.set(1, 0, 0).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
         let dxRight = this._direction.x * this.velocity.x * delta; let dzRight = this._direction.z * this.velocity.x * delta;
         this._direction.set(0, 0, -1).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
@@ -472,7 +480,14 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        this.velocity.y -= this.gravity * delta; const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
+        if (inFluid) {
+            this.velocity.y -= this.gravity * 0.1 * delta;
+            if (this.velocity.y < -3.0) this.velocity.y = -3.0; 
+        } else {
+            this.velocity.y -= this.gravity * delta; 
+        }
+        
+        const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
         for (let i = 0; i < ySteps; i++) {
             this.camera.position.y += yStepAmt;
             if (this.velocity.y < 0) { if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { let highestBlockY = Math.floor(this.camera.position.y - 1.5 + 0.5); this.camera.position.y = highestBlockY + 0.5 + 1.5; this.velocity.y = 0; this.canJump = true; break; } else { this.canJump = false; } } 
