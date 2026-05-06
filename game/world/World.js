@@ -30,7 +30,7 @@ export class World {
         this.materials = {
             1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
             4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
-            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }), 
+            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7, depthWrite: false }), 
             9: [ new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }) ],
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
             11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
@@ -98,7 +98,11 @@ export class World {
         }
     }
 
-    addTorchLight(x, y, z) { const light = new THREE.PointLight(0xffaa44, 15, 14); light.position.set(x, y + 0.2, z); this.scene.add(light); this.lightSources.set(`${x},${y},${z}`, light); }
+    addTorchLight(x, y, z) { 
+        const key = `${x},${y},${z}`;
+        if (this.lightSources.has(key)) { this.scene.remove(this.lightSources.get(key)); }
+        const light = new THREE.PointLight(0xffaa44, 15, 14); light.position.set(x, y + 0.2, z); this.scene.add(light); this.lightSources.set(key, light); 
+    }
     updateLights() { for (const light of this.lightSources.values()) light.intensity = 12 + (Math.random() * 4); }
 
     generateChunkData(cx, cz) {

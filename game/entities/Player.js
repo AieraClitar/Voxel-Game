@@ -108,7 +108,8 @@ export class Player {
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
-            this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
+            const rx = 16 + (Math.random() * 10 - 5); const rz = 16 + (Math.random() * 10 - 5);
+            this.camera.position.set(rx, this.world.getSurfaceHeight(rx, rz) + 4, rz); this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
         }
     }
@@ -432,6 +433,11 @@ export class Player {
                     if (selected.type === 'torch' && type === 'leaves') break; if (type === 'torch') break; 
                     const normal = intersect.face.normal.clone();
                     let nx = bx + Math.round(normal.x); let ny = by + Math.round(normal.y); let nz = bz + Math.round(normal.z);
+                    
+                    if (selected.type === 'torch') {
+                        if (Math.round(normal.y) === -1) break; 
+                        if (type === 'water' || this.world.getBlockType(nx, ny, nz) === 'water') break;
+                    }
                     
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
