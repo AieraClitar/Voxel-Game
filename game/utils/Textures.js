@@ -3,10 +3,9 @@ import * as THREE from 'three';
 export const Textures = {
     generate: function(type) {
         const isTool = type === 'stick' || type === 'bow' || type === 'crossbow' || type === 'gun' || (type && (type.includes('sword') || type.includes('pickaxe') || type.includes('axe') || type.includes('shovel')));
-        const isDetailed = type === 'stone' || type === 'dirt' || type === 'grass_top' || type === 'grass_side' || type === 'sand' || type === 'snow' || type === 'leaves';
         const canvas = document.createElement('canvas');
-        canvas.width = isTool ? 256 : (isDetailed ? 256 : 16); 
-        canvas.height = isTool ? 256 : (isDetailed ? 256 : 16);
+        canvas.width = 256; 
+        canvas.height = 256;
         const ctx = canvas.getContext('2d');
 
         const fillBase = (hex) => { ctx.fillStyle = hex; ctx.fillRect(0, 0, canvas.width, canvas.height); };
@@ -48,22 +47,22 @@ export const Textures = {
         else if (type === 'snow') { fillBase('#f0f8ff'); addSmoothNoise(20, 0.1, 8); addNoise(10, 0.1); }
         
         // ✨ THE FIX: Ice texture is now properly generated
-        else if (type === 'ice') { fillBase('#a0d8ef'); addNoise(10, 0.15); ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 4, 16, 1); }
+        else if (type === 'ice') { fillBase('#a0d8ef'); addSmoothNoise(20, 0.15, 8); ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(0, 0, 256, 32); ctx.fillRect(0, 64, 256, 16); }
         
-        else if (type === 'oak_side') { fillBase('#5c4033'); ctx.fillStyle = '#4a332a'; for(let x=0; x<16; x+=3) ctx.fillRect(x + Math.random(), 0, 1, 16); }
-        else if (type === 'birch_side') { fillBase('#d4d4d4'); ctx.fillStyle = '#222222'; ctx.fillRect(0, 3, 4, 1); ctx.fillRect(11, 7, 5, 1); ctx.fillRect(3, 12, 6, 1); }
-        else if (type === 'wood_top') { fillBase('#8b5a2b'); ctx.strokeStyle = '#5c4033'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(8, 8, 3, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI*2); ctx.stroke(); }
-        else if (type === 'oak_planks') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0, 3, 16, 1); ctx.fillRect(0, 7, 16, 1); ctx.fillRect(0, 11, 16, 1); ctx.fillRect(0, 15, 16, 1); ctx.fillRect(4, 0, 1, 3); ctx.fillRect(10, 4, 1, 3); ctx.fillRect(6, 8, 1, 3); ctx.fillRect(12, 12, 1, 3); }
-        else if (type === 'birch_planks') { fillBase('#e2d4b5'); addNoise(15, 0.15); ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(0, 3, 16, 1); ctx.fillRect(0, 7, 16, 1); ctx.fillRect(0, 11, 16, 1); ctx.fillRect(0, 15, 16, 1); ctx.fillRect(4, 0, 1, 3); ctx.fillRect(10, 4, 1, 3); ctx.fillRect(6, 8, 1, 3); ctx.fillRect(12, 12, 1, 3); }
-        else if (type === 'crafting_side') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0,0,16,2); ctx.fillStyle = '#888'; ctx.fillRect(10, 4, 4, 6); ctx.fillStyle = '#333'; ctx.fillRect(2, 6, 4, 4); }
-        else if (type === 'crafting_top') { fillBase('#8b5a2b'); addNoise(20, 0.2); ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 7, 16, 2); ctx.fillRect(0, 14, 16, 2); ctx.fillRect(0, 0, 2, 16); ctx.fillRect(7, 0, 2, 16); ctx.fillRect(14, 0, 2, 16); }
-        else if (type === 'cactus') { fillBase('#2ecc71'); addNoise(15, 0.2); ctx.fillStyle = '#1e8449'; for(let x=0; x<16; x+=2) ctx.fillRect(x, 0, 1, 16); ctx.fillStyle = '#000000'; for(let i=0; i<15; i++) ctx.fillRect(Math.random()*16, Math.random()*16, 1, 1); }
-        else if (type === 'torch') { ctx.fillStyle = '#5c4033'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#ffaa00'; ctx.fillRect(0,0,16,6); ctx.fillStyle = '#ffffff'; ctx.fillRect(4,0,8,3); }
-        else if (type === 'sun') { ctx.fillStyle = '#FFD700'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(2, 2, 12, 12); }
-        else if (type === 'moon') { ctx.fillStyle = '#DDDDDD'; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = '#AAAAAA'; ctx.fillRect(2, 2, 4, 4); ctx.fillRect(10, 8, 3, 3); }
-        else if (type === 'sun_halo') { const grad = ctx.createRadialGradient(8,8,0, 8,8,8); grad.addColorStop(0, 'rgba(255, 215, 0, 0.4)'); grad.addColorStop(1, 'rgba(255, 215, 0, 0)'); ctx.fillStyle = grad; ctx.fillRect(0,0,16,16); }
-        else if (type.includes('zombie_face')) { fillBase('#417031'); addNoise(20, 0.2); ctx.fillStyle = '#111'; ctx.fillRect(2, 4, 4, 3); ctx.fillRect(10, 4, 4, 3); ctx.fillStyle = '#224018'; ctx.fillRect(5, 10, 6, 2); if (type === 'zombie_face_var1') { ctx.fillStyle = '#3a592c'; ctx.fillRect(1, 1, 2, 6); } if (type === 'zombie_face_var2') { ctx.fillStyle = '#8f2020'; ctx.fillRect(2, 4, 4, 3); } }
-        else if (type.includes('archer_face')) { fillBase('#e0ac69'); ctx.fillStyle = '#111'; ctx.fillRect(2, 5, 4, 2); ctx.fillRect(10, 5, 4, 2); ctx.fillStyle = type === 'archer_face_var1' ? '#2c3e50' : '#27ae60'; ctx.fillRect(0, 0, 16, 4); ctx.fillRect(0, 0, 2, 16); ctx.fillRect(14, 0, 2, 16); }
+        else if (type === 'oak_side') { fillBase('#5c4033'); addSmoothNoise(40, 0.3, 16); ctx.fillStyle = '#4a332a'; for(let x=0; x<256; x+=16) ctx.fillRect(x + Math.random()*8, 0, 8, 256); }
+        else if (type === 'birch_side') { fillBase('#d4d4d4'); addSmoothNoise(30, 0.2, 16); ctx.fillStyle = '#222222'; ctx.fillRect(0, 48, 64, 16); ctx.fillRect(176, 112, 80, 16); ctx.fillRect(48, 192, 96, 16); }
+        else if (type === 'wood_top') { fillBase('#8b5a2b'); addSmoothNoise(30, 0.2, 8); ctx.strokeStyle = '#5c4033'; ctx.lineWidth = 16; ctx.beginPath(); ctx.arc(128, 128, 48, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(128, 128, 96, 0, Math.PI*2); ctx.stroke(); }
+        else if (type === 'oak_planks') { fillBase('#8b5a2b'); addSmoothNoise(30, 0.2, 8); ctx.fillStyle = 'rgba(0,0,0,0.4)'; for(let y=48; y<256; y+=64) ctx.fillRect(0, y, 256, 8); for(let x=64, i=0; x<256; x+=64, i++) ctx.fillRect(x, i*64, 8, 48); }
+        else if (type === 'birch_planks') { fillBase('#e2d4b5'); addSmoothNoise(20, 0.15, 8); ctx.fillStyle = 'rgba(0,0,0,0.2)'; for(let y=48; y<256; y+=64) ctx.fillRect(0, y, 256, 8); for(let x=64, i=0; x<256; x+=64, i++) ctx.fillRect(x, i*64, 8, 48); }
+        else if (type === 'crafting_side') { fillBase('#8b5a2b'); addSmoothNoise(30, 0.2, 8); ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0,0,256,32); ctx.fillStyle = '#888'; ctx.fillRect(160, 64, 64, 96); ctx.fillStyle = '#333'; ctx.fillRect(32, 96, 64, 64); }
+        else if (type === 'crafting_top') { fillBase('#8b5a2b'); addSmoothNoise(30, 0.2, 8); ctx.fillStyle = '#4a2f1d'; ctx.fillRect(0, 0, 256, 32); ctx.fillRect(0, 112, 256, 32); ctx.fillRect(0, 224, 256, 32); ctx.fillRect(0, 0, 32, 256); ctx.fillRect(112, 0, 32, 256); ctx.fillRect(224, 0, 32, 256); }
+        else if (type === 'cactus') { fillBase('#2ecc71'); addSmoothNoise(30, 0.2, 8); ctx.fillStyle = '#1e8449'; for(let x=0; x<256; x+=32) ctx.fillRect(x, 0, 16, 256); ctx.fillStyle = '#000000'; for(let i=0; i<300; i++) ctx.fillRect(Math.random()*256, Math.random()*256, 4, 4); }
+        else if (type === 'torch') { ctx.fillStyle = '#5c4033'; ctx.fillRect(0,0,256,256); ctx.fillStyle = '#ffaa00'; ctx.fillRect(0,0,256,96); ctx.fillStyle = '#ffffff'; ctx.fillRect(64,0,128,48); }
+        else if (type === 'sun') { ctx.fillStyle = '#FFD700'; ctx.fillRect(0, 0, 256, 256); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(32, 32, 192, 192); }
+        else if (type === 'moon') { ctx.fillStyle = '#DDDDDD'; ctx.fillRect(0, 0, 256, 256); ctx.fillStyle = '#AAAAAA'; ctx.fillRect(32, 32, 64, 64); ctx.fillRect(160, 128, 48, 48); }
+        else if (type === 'sun_halo') { const grad = ctx.createRadialGradient(128,128,0, 128,128,128); grad.addColorStop(0, 'rgba(255, 215, 0, 0.4)'); grad.addColorStop(1, 'rgba(255, 215, 0, 0)'); ctx.fillStyle = grad; ctx.fillRect(0,0,256,256); }
+        else if (type.includes('zombie_face')) { fillBase('#417031'); addSmoothNoise(30, 0.2, 8); ctx.fillStyle = '#111'; ctx.fillRect(32, 64, 64, 48); ctx.fillRect(160, 64, 64, 48); ctx.fillStyle = '#224018'; ctx.fillRect(80, 160, 96, 32); if (type === 'zombie_face_var1') { ctx.fillStyle = '#3a592c'; ctx.fillRect(16, 16, 32, 96); } if (type === 'zombie_face_var2') { ctx.fillStyle = '#8f2020'; ctx.fillRect(32, 64, 64, 48); } }
+        else if (type.includes('archer_face')) { fillBase('#e0ac69'); ctx.fillStyle = '#111'; ctx.fillRect(32, 80, 64, 32); ctx.fillRect(160, 80, 64, 32); ctx.fillStyle = type === 'archer_face_var1' ? '#2c3e50' : '#27ae60'; ctx.fillRect(0, 0, 256, 64); ctx.fillRect(0, 0, 32, 256); ctx.fillRect(224, 0, 32, 256); }
         else if (isTool) {
             ctx.clearRect(0, 0, 256, 256);
             const isStone = type.includes('stone'); const headColor = isStone ? '#7c8082' : '#997a4d'; const handleColor = '#594026'; const outlineColor = '#1f1f1f';
