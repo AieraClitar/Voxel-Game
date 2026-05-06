@@ -2,17 +2,11 @@ import * as THREE from 'three';
 import { Textures } from '../utils/Textures.js';
 import { AudioSys } from '../utils/AudioSys.js';
 
-const weaponMaterials = {
-    brown: new THREE.MeshLambertMaterial({color: 0x5c4033}),
-    gray: new THREE.MeshLambertMaterial({color: 0x7f8c8d}),
-    wood: new THREE.MeshLambertMaterial({color: 0x8b5a2b})
-};
-
 export function create3DWeapon(type) {
     const group = new THREE.Group();
     if (!type || type === 'none') return group;
     
-    const brownMat = weaponMaterials.brown; const grayMat = weaponMaterials.gray; const woodMat = weaponMaterials.wood;
+    const brownMat = new THREE.MeshLambertMaterial({color: 0x5c4033}); const grayMat = new THREE.MeshLambertMaterial({color: 0x7f8c8d}); const woodMat = new THREE.MeshLambertMaterial({color: 0x8b5a2b});
     const headMat = (type.includes('stone') || type === 'gun') ? grayMat : woodMat;
 
     if (type.includes('sword')) {

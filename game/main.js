@@ -66,11 +66,7 @@ if (window.io) {
 
     function updateNetworkPlayerItem(group, itemType) {
         if (group.userData.heldItemType === itemType) return;
-        group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); 
-        if (oldItem) { 
-            armR.remove(oldItem); 
-            oldItem.traverse(child => { if(child.isMesh && child.geometry) child.geometry.dispose(); }); 
-        }
+        group.userData.heldItemType = itemType; const armR = group.userData.armR; const oldItem = armR.getObjectByName('equippedItem'); if (oldItem) armR.remove(oldItem);
         if (itemType && itemType !== 'none') {
             let mesh;
             if (['wooden_sword', 'stone_sword', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'stone_axe', 'wooden_shovel', 'stone_shovel', 'stick', 'bow', 'crossbow', 'gun'].includes(itemType)) {

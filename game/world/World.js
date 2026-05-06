@@ -98,11 +98,7 @@ export class World {
         }
     }
 
-    addTorchLight(x, y, z) { 
-        const key = `${x},${y},${z}`;
-        if (this.lightSources.has(key)) { this.scene.remove(this.lightSources.get(key)); }
-        const light = new THREE.PointLight(0xffaa44, 15, 14); light.position.set(x, y + 0.2, z); this.scene.add(light); this.lightSources.set(key, light); 
-    }
+    addTorchLight(x, y, z) { const light = new THREE.PointLight(0xffaa44, 15, 14); light.position.set(x, y + 0.2, z); this.scene.add(light); this.lightSources.set(`${x},${y},${z}`, light); }
     updateLights() { for (const light of this.lightSources.values()) light.intensity = 12 + (Math.random() * 4); }
 
     generateChunkData(cx, cz) {
@@ -241,7 +237,7 @@ export class World {
         }
 
         for (const [key, chunkGroup] of this.chunks.entries()) {
-            if (!activeChunks.has(key)) { this.scene.remove(chunkGroup); chunkGroup.children.forEach(mesh => { if(mesh.dispose) mesh.dispose(); }); this.chunks.delete(key); this.chunkMeshState.delete(key); }
+            if (!activeChunks.has(key)) { this.scene.remove(chunkGroup); chunkGroup.children.forEach(mesh => { if(mesh.geometry) mesh.geometry.dispose(); }); this.chunks.delete(key); this.chunkMeshState.delete(key); }
         }
         for (const key of this.chunkDataState.keys()) {
             const [cx, cz] = key.split(',').map(Number);
@@ -268,7 +264,7 @@ export class World {
 
     removeNetworkedDrop(id) {
         const index = this.drops.findIndex(d => d.id === id);
-        if(index !== -1) { this.dropGroup.remove(this.drops[index].mesh); this.drops.splice(index, 1); }
+        if(index !== -1) { this.dropGroup.remove(this.drops[index].mesh); this.drops[index].mesh.geometry.dispose(); this.drops.splice(index, 1); }
     }
 
     updateDrops(delta) {
