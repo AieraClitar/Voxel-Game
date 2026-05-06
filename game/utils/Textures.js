@@ -24,6 +24,8 @@ export const Textures = {
         
         // ✨ THE FIX: Ice texture is now properly generated
         else if (type === 'ice') { fillBase('#a0d8ef'); addNoise(10, 0.15); ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 4, 16, 1); }
+        else if (type === 'water') { fillBase('#1ca3ec'); addNoise(15, 0.2); ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 4, 16, 1); }
+
         
         else if (type === 'oak_side') { fillBase('#5c4033'); ctx.fillStyle = '#4a332a'; for(let x=0; x<16; x+=3) ctx.fillRect(x + Math.random(), 0, 1, 16); }
         else if (type === 'birch_side') { fillBase('#d4d4d4'); ctx.fillStyle = '#222222'; ctx.fillRect(0, 3, 4, 1); ctx.fillRect(11, 7, 5, 1); ctx.fillRect(3, 12, 6, 1); }

@@ -30,7 +30,7 @@ export class World {
         this.materials = {
             1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
             4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
-            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }), 
+            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 8: new THREE.MeshLambertMaterial({ map: Textures.generate('water'), transparent: true, opacity: 0.7 }), 
             9: [ new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }) ],
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
             11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
@@ -134,6 +134,8 @@ export class World {
                         else if (y > height - 3 && y !== -30) typeId = biome === 'desert' ? 5 : 3; 
                         
                         const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); if (data[idx] === 0) data[idx] = typeId;
+                    } else if (y <= WATER_LEVEL) {
+                        const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); if (data[idx] === 0) data[idx] = 8;
                     }
                 }
 
@@ -194,6 +196,10 @@ export class World {
                     if (isSolid(id)) {
                         const top = this.getBlockType(wx, wy+1, wz); const bot = this.getBlockType(wx, wy-1, wz); const left = this.getBlockType(wx-1, wy, wz); const right = this.getBlockType(wx+1, wy, wz); const front = this.getBlockType(wx, wy, wz+1); const back = this.getBlockType(wx, wy, wz-1);
                         if (isSolid(BLOCK_TYPES[top]) && isSolid(BLOCK_TYPES[bot]) && isSolid(BLOCK_TYPES[left]) && isSolid(BLOCK_TYPES[right]) && isSolid(BLOCK_TYPES[front]) && isSolid(BLOCK_TYPES[back])) continue;
+                    } else if (id === 8 || id === 7) {
+                        const top = this.getBlockType(wx, wy+1, wz); const bot = this.getBlockType(wx, wy-1, wz); const left = this.getBlockType(wx-1, wy, wz); const right = this.getBlockType(wx+1, wy, wz); const front = this.getBlockType(wx, wy, wz+1); const back = this.getBlockType(wx, wy, wz-1);
+                        const isOpaque = (t) => t === ID_TO_TYPE[id] || isSolid(BLOCK_TYPES[t]);
+                        if (isOpaque(top) && isOpaque(bot) && isOpaque(left) && isOpaque(right) && isOpaque(front) && isOpaque(back)) continue;
                     }
 
                     matrix.makeTranslation(wx, wy, wz);
