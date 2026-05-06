@@ -27,9 +27,10 @@ export class World {
         
         const toolMat = (texName) => new THREE.MeshLambertMaterial({ map: Textures.generate(texName), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
 
-        const fluidMat = (texName, opacity) => {
+        const fluidMat = (texName, opacity, unlit = false) => {
             const tex = Textures.generate(texName); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            return new THREE.MeshLambertMaterial({ map: tex, transparent: true, opacity: opacity, depthWrite: false });
+            return unlit ? new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: opacity, depthWrite: false })
+                         : new THREE.MeshLambertMaterial({ map: tex, transparent: true, opacity: opacity, depthWrite: false });
         };
 
         this.materials = {
@@ -42,7 +43,7 @@ export class World {
             11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
             13: [ new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }) ],
             14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') }),
-            17: fluidMat('lava', 0.95)
+            17: fluidMat('lava', 0.95, true)
         };
 
         this.itemMaterials = {
@@ -132,16 +133,7 @@ export class World {
                     if (isCave) {
                         if (y <= -25) {
                             const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); 
-                            if (data[idx] === 0) {
                                 data[idx] = 17; // lava
-                                const key = `${wx},${y},${wz}`;
-                                if (!this.lightSources.has(key)) {
-                                    const light = new THREE.PointLight(0xffaa00, 10, 8); 
-                                    light.position.set(wx, y + 1, wz); 
-                                    this.scene.add(light); 
-                                    this.lightSources.set(key, light);
-                                }
-                            }
                         }
                     } else {
                         // ✨ THE FIX: Tundra lakes are filled with WATER (8), with ICE (7) only on the top block!
