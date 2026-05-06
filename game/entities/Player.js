@@ -308,10 +308,6 @@ export class Player {
                 obj.traverse(child => {
                     if (child.isMesh) {
                         if (child.geometry) child.geometry.dispose();
-                        if (child.material) {
-                            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-                            else child.material.dispose();
-                        }
                     }
                 });
             }

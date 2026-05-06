@@ -237,7 +237,7 @@ export class World {
         }
 
         for (const [key, chunkGroup] of this.chunks.entries()) {
-            if (!activeChunks.has(key)) { this.scene.remove(chunkGroup); chunkGroup.children.forEach(mesh => { if(mesh.geometry) mesh.geometry.dispose(); }); this.chunks.delete(key); this.chunkMeshState.delete(key); }
+            if (!activeChunks.has(key)) { this.scene.remove(chunkGroup); chunkGroup.children.forEach(mesh => { if(mesh.dispose) mesh.dispose(); }); this.chunks.delete(key); this.chunkMeshState.delete(key); }
         }
         for (const key of this.chunkDataState.keys()) {
             const [cx, cz] = key.split(',').map(Number);
@@ -264,7 +264,7 @@ export class World {
 
     removeNetworkedDrop(id) {
         const index = this.drops.findIndex(d => d.id === id);
-        if(index !== -1) { this.dropGroup.remove(this.drops[index].mesh); this.drops[index].mesh.geometry.dispose(); this.drops.splice(index, 1); }
+        if(index !== -1) { this.dropGroup.remove(this.drops[index].mesh); this.drops.splice(index, 1); }
     }
 
     updateDrops(delta) {
