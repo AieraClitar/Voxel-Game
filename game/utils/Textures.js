@@ -6,7 +6,7 @@ export const Textures = {
         const canvas = document.createElement('canvas');
         canvas.width = 256; 
         canvas.height = 256;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         const fillBase = (hex) => { ctx.fillStyle = hex; ctx.fillRect(0, 0, canvas.width, canvas.height); };
         const addNoise = (variance, opacity = 1) => {
