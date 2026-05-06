@@ -37,7 +37,10 @@ export class World {
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <worldpos_vertex>',
                     `#include <worldpos_vertex>
-                    vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;`
+                    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+                    #ifdef USE_INSTANCING
+                        vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
+                    #endif`
                 );
                 shader.fragmentShader = shader.fragmentShader.replace(
                     '#include <common>',
