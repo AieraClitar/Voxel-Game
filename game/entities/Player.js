@@ -118,7 +118,7 @@ export class Player {
         document.addEventListener('keydown', (e) => {
             if (e.code === 'F5') { e.preventDefault(); this.cameraMode = (this.cameraMode + 1) % 3; return; }
             if (e.code === 'KeyQ') { e.preventDefault(); this.dropSelectedItem(); return; } 
-            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break; case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
+            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': if(this.inWater) { this.velocity.y = 4; } else if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break; case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
         });
         document.addEventListener('keyup', (e) => { switch(e.code){ case 'KeyW': this.moveForward = false; break; case 'KeyA': this.moveLeft = false; break; case 'KeyS': this.moveBackward = false; break; case 'KeyD': this.moveRight = false; break; } });
         document.addEventListener('mousedown', (e) => { if(this.controls.isLocked) this.onInteract(e.button); });
@@ -413,6 +413,7 @@ export class Player {
                 if (type === 'bedrock') break;
 
                 this.isMining = true; this.miningTimer = 0; this.targetBlockPos = `${bx},${by},${bz}`;
+                if (window.socket) window.socket.emit('startMining', {x: bx, y: by, z: bz});
                 let speedMult = 1.0;
                 if (tool === 'wooden_pickaxe' && type === 'stone') speedMult = 3.0; if (tool === 'stone_pickaxe' && type === 'stone') speedMult = 6.0;
                 if (tool === 'wooden_axe' && (type.includes('wood') || type.includes('planks') || type === 'crafting_table')) speedMult = 3.0;
@@ -474,7 +475,19 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        this.velocity.y -= this.gravity * delta; const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
+        this.inWater = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.0), Math.floor(this.camera.position.z)) === 'water' || 
+                       this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z)) === 'water';
+        
+        if (this.inWater) {
+            this.velocity.y -= this.gravity * 0.2 * delta;
+            if (this.velocity.y < -4) this.velocity.y = -4; 
+            this.speed = 2.5;
+        } else {
+            this.velocity.y -= this.gravity * delta; 
+            this.speed = 5.0;
+        }
+
+        const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
         for (let i = 0; i < ySteps; i++) {
             this.camera.position.y += yStepAmt;
             if (this.velocity.y < 0) { if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { let highestBlockY = Math.floor(this.camera.position.y - 1.5 + 0.5); this.camera.position.y = highestBlockY + 0.5 + 1.5; this.velocity.y = 0; this.canJump = true; break; } else { this.canJump = false; } } 
