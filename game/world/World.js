@@ -6,7 +6,7 @@ const CHUNK_SIZE = 16; const CHUNK_HEIGHT = 128; const Y_OFFSET = 30; const REND
 
 const BLOCK_TYPES = {
     'air': 0, 'bedrock': 1, 'stone': 2, 'dirt': 3, 'grass': 4, 'sand': 5, 'snow': 6, 'ice': 7, 'water': 8, 'oak_wood': 9,
-    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16, 'lava': 17
+    'birch_wood': 10, 'leaves': 11, 'oak_planks': 12, 'crafting_table': 13, 'cactus': 14, 'torch': 15, 'birch_planks': 16
 };
 const ID_TO_TYPE = Object.keys(BLOCK_TYPES);
 
@@ -27,23 +27,60 @@ export class World {
         
         const toolMat = (texName) => new THREE.MeshLambertMaterial({ map: Textures.generate(texName), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
 
-        const fluidMat = (texName, opacity, unlit = false) => {
-            const tex = Textures.generate(texName); tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-            return unlit ? new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: opacity, depthWrite: false })
-                         : new THREE.MeshLambertMaterial({ map: tex, transparent: true, opacity: opacity, depthWrite: false });
+        const applyTriplanar = (material, scale = 0.25) => {
+            material.onBeforeCompile = (shader) => {
+                shader.vertexShader = shader.vertexShader.replace(
+                    '#include <common>',
+                    `#include <common>
+                    varying vec3 vWorldPos;`
+                );
+                shader.vertexShader = shader.vertexShader.replace(
+                    '#include <worldpos_vertex>',
+                    `#include <worldpos_vertex>
+                    vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;`
+                );
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <common>',
+                    `#include <common>
+                    varying vec3 vWorldPos;`
+                );
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <map_fragment>',
+                    `
+                    #ifdef USE_MAP
+                        vec3 blending = abs(vNormal);
+                        blending = normalize(max(blending, 0.00001));
+                        float b = (blending.x + blending.y + blending.z);
+                        blending /= vec3(b, b, b);
+                        
+                        vec4 xaxis = texture2D( map, vWorldPos.yz * ${scale} );
+                        vec4 yaxis = texture2D( map, vWorldPos.xz * ${scale} );
+                        vec4 zaxis = texture2D( map, vWorldPos.xy * ${scale} );
+                        
+                        vec4 texelColor = xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
+                        diffuseColor *= texelColor;
+                    #endif
+                    `
+                );
+            };
+            return material;
         };
 
         this.materials = {
-            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 2: new THREE.MeshLambertMaterial({ map: Textures.generate('stone') }), 3: new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), 
-            4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
-            5: new THREE.MeshLambertMaterial({ map: Textures.generate('sand') }), 6: new THREE.MeshLambertMaterial({ map: Textures.generate('snow') }), 7: new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 }), 
-            8: fluidMat('water', 0.7), 
+            1: new THREE.MeshLambertMaterial({ color: 0x222222 }), 
+            2: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('stone') })), 
+            3: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') })), 
+            4: [ new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('grass_top') })), applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('dirt') })), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('grass_side') }) ],
+            5: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('sand') })), 
+            6: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('snow') })), 
+            7: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('ice'), transparent: true, opacity: 0.8 })), 
+            8: new THREE.MeshLambertMaterial({ color: 0x1ca3ec, transparent: true, opacity: 0.7 }), 
             9: [ new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_side') }) ],
             10: [ new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('wood_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('birch_side') }) ],
-            11: new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 }), 12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
+            11: applyTriplanar(new THREE.MeshLambertMaterial({ map: Textures.generate('leaves'), transparent: true, alphaTest: 0.5 })), 
+            12: new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), 
             13: [ new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_top') }), new THREE.MeshLambertMaterial({ map: Textures.generate('oak_planks') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }), new THREE.MeshLambertMaterial({ map: Textures.generate('crafting_side') }) ],
-            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') }),
-            17: fluidMat('lava', 0.95, true)
+            14: new THREE.MeshLambertMaterial({ map: Textures.generate('cactus') }), 15: new THREE.MeshLambertMaterial({ map: Textures.generate('torch'), transparent: true, alphaTest: 0.5 }), 16: new THREE.MeshLambertMaterial({ map: Textures.generate('birch_planks') })
         };
 
         this.itemMaterials = {
@@ -57,7 +94,7 @@ export class World {
     getSurfaceHeight(x, z) { for (let y = 60; y >= -30; y--) { if (this.hasBlock(x, y, z)) return y; } return 5; }
     hasRoof(x, y, z) { for(let i = Math.round(y) + 1; i <= Math.round(y) + 30; i++) { const type = this.getBlockType(Math.round(x), i, Math.round(z)); if(type !== 'air' && type !== 'water' && type !== 'torch') return true; } return false; }
     getBlockType(x, y, z) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return 'air'; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const data = this.chunkData.get(this.getChunkKey(cx, cz)); if (!data) return 'air'; const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx === -1) return 'air'; return ID_TO_TYPE[data[idx]]; }
-    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water' && type !== 'lava'; }
+    hasBlock(x, y, z) { const type = this.getBlockType(x, y, z); return type !== 'air' && type !== 'water'; }
     setBlockData(x, y, z, typeId) { if (y < -30 || y >= -30 + CHUNK_HEIGHT) return; const cx = Math.floor(x / CHUNK_SIZE); const cz = Math.floor(z / CHUNK_SIZE); const cKey = this.getChunkKey(cx, cz); let data = this.chunkData.get(cKey); if (!data) { data = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE); this.chunkData.set(cKey, data); } const lx = x - cx * CHUNK_SIZE; const lz = z - cz * CHUNK_SIZE; const ly = y + Y_OFFSET; const idx = this.getBlockIndex(lx, ly, lz); if(idx !== -1) data[idx] = typeId; }
 
     addBlock(x, y, z, typeStr, normal = null, force = false) {
@@ -106,11 +143,7 @@ export class World {
         }
     }
 
-    addTorchLight(x, y, z) { 
-        const key = `${x},${y},${z}`;
-        if (this.lightSources.has(key)) return; 
-        const light = new THREE.PointLight(0xffaa44, 15, 14); light.position.set(x, y + 0.2, z); this.scene.add(light); this.lightSources.set(key, light); 
-    }
+    addTorchLight(x, y, z) { const light = new THREE.PointLight(0xffaa44, 15, 14); light.position.set(x, y + 0.2, z); this.scene.add(light); this.lightSources.set(`${x},${y},${z}`, light); }
     updateLights() { for (const light of this.lightSources.values()) light.intensity = 12 + (Math.random() * 4); }
 
     generateChunkData(cx, cz) {
@@ -130,12 +163,7 @@ export class World {
                     if (y === -30) typeId = 1; 
                     else if (y <= height) { let n1 = this.roughMap.getNoise(wx * 0.04, y * 0.04 + wz * 0.01); let n2 = this.humidMap.getNoise(wz * 0.04, y * 0.04 + wx * 0.01); if (Math.abs(n1) < 0.12 && Math.abs(n2) < 0.12) isCave = true; }
                     
-                    if (isCave) {
-                        if (y <= -25) {
-                            const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); 
-                                data[idx] = 17; // lava
-                        }
-                    } else {
+                    if (!isCave) {
                         // ✨ THE FIX: Tundra lakes are filled with WATER (8), with ICE (7) only on the top block!
                         if (y > height && y <= WATER_LEVEL) {
                             typeId = (biome === 'tundra' && y === WATER_LEVEL) ? 7 : 8; 
@@ -196,44 +224,17 @@ export class World {
         const data = this.chunkData.get(cKey); if (!data) return;
 
         const chunkGroup = new THREE.Group(); chunkGroup.userData.isChunk = true;
-        const instances = {}; for(let i = 1; i <= 17; i++) instances[i] = []; 
+        const instances = {}; for(let i = 1; i <= 16; i++) instances[i] = []; 
         const startX = cx * CHUNK_SIZE; const startZ = cz * CHUNK_SIZE; const matrix = new THREE.Matrix4();
         
         // ✨ THE FIX: Ice (7) is added here so blocks below it don't turn invisible to create the void bug
-        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15 && id !== 17;
-
-        const fluidGeometries = { 8: { p: [], n: [], uv: [] }, 17: { p: [], n: [], uv: [] } };
-        const pushQuad = (id, p1, p2, p3, p4, n, uvs) => {
-            fluidGeometries[id].p.push(...p1, ...p2, ...p3, ...p1, ...p3, ...p4);
-            fluidGeometries[id].n.push(...n, ...n, ...n, ...n, ...n, ...n);
-            fluidGeometries[id].uv.push(...uvs[0], ...uvs[1], ...uvs[2], ...uvs[0], ...uvs[2], ...uvs[3]);
-        };
+        const isSolid = (id) => id > 0 && id !== 7 && id !== 8 && id !== 11 && id !== 14 && id !== 15;
 
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
             for (let lz = 0; lz < CHUNK_SIZE; lz++) {
                 for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
                     const id = data[this.getBlockIndex(lx, ly, lz)]; if (id === 0) continue; 
                     const wx = startX + lx; const wy = ly - Y_OFFSET; const wz = startZ + lz;
-
-                    if (id === 8 || id === 17) {
-                        const typeStr = id === 8 ? 'water' : 'lava';
-                        const top = this.getBlockType(wx, wy+1, wz); const bot = this.getBlockType(wx, wy-1, wz); const left = this.getBlockType(wx-1, wy, wz); const right = this.getBlockType(wx+1, wy, wz); const front = this.getBlockType(wx, wy, wz+1); const back = this.getBlockType(wx, wy, wz-1);
-                        
-                        const h = (top === 'air' || top !== typeStr) ? 0.85 : 1.0;
-                        const p = [
-                            [wx-0.5, wy-0.5, wz-0.5], [wx+0.5, wy-0.5, wz-0.5], [wx+0.5, wy-0.5, wz+0.5], [wx-0.5, wy-0.5, wz+0.5],
-                            [wx-0.5, wy-0.5+h, wz-0.5], [wx+0.5, wy-0.5+h, wz-0.5], [wx+0.5, wy-0.5+h, wz+0.5], [wx-0.5, wy-0.5+h, wz+0.5]
-                        ];
-                        const uvs = [[wx,wz+1], [wx+1,wz+1], [wx+1,wz], [wx,wz]]; // World-aligned UVs
-
-                        if (top !== typeStr) pushQuad(id, p[7], p[6], p[5], p[4], [0,1,0], uvs); 
-                        if (bot !== typeStr && bot !== 'bedrock' && bot !== 'stone') pushQuad(id, p[0], p[1], p[2], p[3], [0,-1,0], uvs); 
-                        if (left !== typeStr) pushQuad(id, p[0], p[4], p[7], p[3], [-1,0,0], uvs); 
-                        if (right !== typeStr) pushQuad(id, p[1], p[2], p[6], p[5], [1,0,0], uvs); 
-                        if (front !== typeStr) pushQuad(id, p[3], p[7], p[6], p[2], [0,0,1], uvs); 
-                        if (back !== typeStr) pushQuad(id, p[0], p[1], p[5], p[4], [0,0,-1], uvs); 
-                        continue;
-                    }
 
                     if (isSolid(id)) {
                         const top = this.getBlockType(wx, wy+1, wz); const bot = this.getBlockType(wx, wy-1, wz); const left = this.getBlockType(wx-1, wy, wz); const right = this.getBlockType(wx+1, wy, wz); const front = this.getBlockType(wx, wy, wz+1); const back = this.getBlockType(wx, wy, wz-1);
@@ -250,26 +251,12 @@ export class World {
             }
         }
 
-        for (let i = 1; i <= 17; i++) {
-            if (i === 8 || i === 17) continue; // Handled by custom geometry
+        for (let i = 1; i <= 16; i++) {
             if (instances[i].length === 0) continue;
             const geo = (i === 15) ? this.geoTorch : this.geoBlock; const mat = this.materials[i]; const iMesh = new THREE.InstancedMesh(geo, mat, instances[i].length); iMesh.castShadow = true; iMesh.receiveShadow = true; 
             iMesh.userData.positions = []; iMesh.userData.isTerrain = true;
             for (let j = 0; j < instances[i].length; j++) { iMesh.setMatrixAt(j, instances[i][j].matrix); iMesh.userData.positions.push({ x: instances[i][j].x, y: instances[i][j].y, z: instances[i][j].z }); }
             chunkGroup.add(iMesh);
-        }
-
-        for (let fid of [8, 17]) {
-            if (fluidGeometries[fid].p.length > 0) {
-                const geo = new THREE.BufferGeometry();
-                geo.setAttribute('position', new THREE.Float32BufferAttribute(fluidGeometries[fid].p, 3));
-                geo.setAttribute('normal', new THREE.Float32BufferAttribute(fluidGeometries[fid].n, 3));
-                geo.setAttribute('uv', new THREE.Float32BufferAttribute(fluidGeometries[fid].uv, 2));
-                const mesh = new THREE.Mesh(geo, this.materials[fid]);
-                mesh.userData.isTerrain = true;
-                mesh.userData.isFluid = true;
-                chunkGroup.add(mesh);
-            }
         }
 
         if (this.chunks.has(cKey)) { const oldGroup = this.chunks.get(cKey); this.scene.remove(oldGroup); oldGroup.children.forEach(mesh => { if(mesh.dispose) mesh.dispose(); }); }
@@ -312,7 +299,7 @@ export class World {
     }
 
     spawnNetworkedDrop(id, x, y, z, typeStr) {
-        if (typeStr === 'air' || typeStr === 'water' || typeStr === 'lava' || this.drops.some(d => d.id === id)) return;
+        if (typeStr === 'air' || typeStr === 'water' || this.drops.some(d => d.id === id)) return;
         const geo = typeStr === 'torch' ? this.dropGeoTorch : this.dropGeoBlock;
         const mesh = new THREE.Mesh(geo, this.itemMaterials[typeStr] || this.itemMaterials['stone']);
         mesh.position.set(x + (Math.random()-0.5)*0.2, y, z + (Math.random()-0.5)*0.2);
