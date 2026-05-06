@@ -325,30 +325,28 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                // ✨ FIX: Attach to the palm (Y=0.4), NOT the elbow (Y=-0.3). Tilt forward to counter the arm angle.
                 mesh1st = create3DWeapon(selected.type); 
-                mesh1st.position.set(0, 0.4, -0.1); 
+                mesh1st.position.set(0, -0.3, 0); // Position at the hand (bottom of arm)
                 mesh1st.rotation.set(Math.PI / 2, 0, 0); 
                 
                 mesh3rd = create3DWeapon(selected.type); 
-                mesh3rd.position.set(0, -0.75, 0); 
+                mesh3rd.position.set(0, -0.4, 0); 
                 mesh3rd.rotation.set(Math.PI / 2, 0, 0); 
             } else if (selected.type === 'torch') {
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), mat); 
-                mesh1st.position.set(0, 0.4, -0.1); 
+                mesh1st.position.set(0, -0.3, 0); 
                 mesh1st.rotation.set(Math.PI / 8, 0, 0); 
                 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), mat); 
-                mesh3rd.position.set(0, -0.75, -0.15); 
+                mesh3rd.position.set(0, -0.4, 0); 
                 mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                // ✨ FIX: Attach blocks to the palm (Y=0.4) so they don't clip into your body
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
-                mesh1st.position.set(0, 0.4, -0.1); 
+                mesh1st.position.set(0, -0.35, 0); 
                 mesh1st.rotation.set(0, Math.PI / 4, 0); 
                 
                 mesh3rd = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
-                mesh3rd.position.set(0, -0.75, -0.15); 
+                mesh3rd.position.set(0, -0.45, 0); 
                 mesh3rd.rotation.set(0, Math.PI / 4, 0); 
             }
             mesh1st.name = 'equippedItem1st'; this.arm.add(mesh1st);
@@ -440,6 +438,13 @@ export class Player {
                     const nBlock = this.world.getBlockType(nx, ny, nz);
                     if (nBlock !== 'air' && nBlock !== 'water' && nBlock !== 'lava') break;
                     
+                    const pRadius = 0.3;
+                    if (
+                        nx + 0.5 > this.camera.position.x - pRadius && nx - 0.5 < this.camera.position.x + pRadius &&
+                        ny + 0.5 > this.camera.position.y - 1.5 && ny - 0.5 < this.camera.position.y + 0.5 &&
+                        nz + 0.5 > this.camera.position.z - pRadius && nz - 0.5 < this.camera.position.z + pRadius
+                    ) break;
+
                     this.world.addBlock(nx, ny, nz, selected.type, new THREE.Vector3(Math.round(normal.x), Math.round(normal.y), Math.round(normal.z)));
                     if(window.socket) window.socket.emit('requestBlockPlace', { x: nx, y: ny, z: nz, type: selected.type });
                     
@@ -471,6 +476,8 @@ export class Player {
         let onIce = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z)) === 'ice';
         
         let friction = onIce ? 2 : (inFluid ? 5 : 10);
+        if (inFluid) { targetX *= 0.4; targetZ *= 0.4; } // Slower movement in water
+
         this.velocity.x += (targetX - this.velocity.x) * friction * delta; this.velocity.z += (targetZ - this.velocity.z) * friction * delta;
         this._direction.set(1, 0, 0).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
         let dxRight = this._direction.x * this.velocity.x * delta; let dzRight = this._direction.z * this.velocity.x * delta;

@@ -131,7 +131,17 @@ export class World {
                     
                     if (isCave) {
                         if (y <= -25) {
-                            const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); if (data[idx] === 0) data[idx] = 17; // lava
+                            const idx = this.getBlockIndex(lx, y + Y_OFFSET, lz); 
+                            if (data[idx] === 0) {
+                                data[idx] = 17; // lava
+                                const key = `${wx},${y},${wz}`;
+                                if (!this.lightSources.has(key)) {
+                                    const light = new THREE.PointLight(0xffaa00, 10, 8); 
+                                    light.position.set(wx, y + 1, wz); 
+                                    this.scene.add(light); 
+                                    this.lightSources.set(key, light);
+                                }
+                            }
                         }
                     } else {
                         // ✨ THE FIX: Tundra lakes are filled with WATER (8), with ICE (7) only on the top block!
