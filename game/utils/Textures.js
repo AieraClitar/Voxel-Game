@@ -21,12 +21,8 @@ export const Textures = {
         else if (type === 'sand') { fillBase('#e6c27a'); addNoise(15, 0.2); }
         else if (type === 'leaves') { fillBase('#2d5a27'); addNoise(40, 0.4); for(let i=0; i<30; i++) { let sx = Math.floor(Math.random()*15); let sy = Math.floor(Math.random()*15); ctx.clearRect(sx, sy, 2, 2); } }
         else if (type === 'snow') { fillBase('#f0f8ff'); addNoise(10, 0.1); }
-        
-        // ✨ THE FIX: Ice texture is now properly generated
         else if (type === 'ice') { fillBase('#a0d8ef'); addNoise(10, 0.15); ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 4, 16, 1); }
-        else if (type === 'water') { fillBase('#1ca3ec'); addNoise(15, 0.2); ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fillRect(0, 0, 16, 2); ctx.fillRect(0, 4, 16, 1); }
-
-        
+        else if (type === 'water') { fillBase('#1ca3ec'); addNoise(10, 0.15); }
         else if (type === 'oak_side') { fillBase('#5c4033'); ctx.fillStyle = '#4a332a'; for(let x=0; x<16; x+=3) ctx.fillRect(x + Math.random(), 0, 1, 16); }
         else if (type === 'birch_side') { fillBase('#d4d4d4'); ctx.fillStyle = '#222222'; ctx.fillRect(0, 3, 4, 1); ctx.fillRect(11, 7, 5, 1); ctx.fillRect(3, 12, 6, 1); }
         else if (type === 'wood_top') { fillBase('#8b5a2b'); ctx.strokeStyle = '#5c4033'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(8, 8, 3, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(8, 8, 6, 0, Math.PI*2); ctx.stroke(); }
