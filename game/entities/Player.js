@@ -8,6 +8,7 @@ export class Player {
     constructor(camera, domElement, world) {
         this.camera = camera; this.world = world; this.world.scene.add(this.camera); this.camera.near = 0.01; this.camera.updateProjectionMatrix();
         this.controls = new PointerLockControls(camera, domElement); this.isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent); this.gameActive = false;
+        this.inWater = false;
 
         this.cameraMode = 0; 
         this.tpsCameraBack = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000); this.tpsCameraBack.position.set(0, 0.5, 4); this.camera.add(this.tpsCameraBack);
@@ -108,7 +109,13 @@ export class Player {
         document.body.appendChild(flash); setTimeout(() => { flash.style.opacity = '0'; setTimeout(()=>flash.remove(), 200); }, 50);
         if (this.health <= 0) {
             this.health = this.maxHealth; if(healthBar) healthBar.style.width = `100%`;
-            this.camera.position.set(16, this.world.getSurfaceHeight(16,16)+2, 16); this.velocity.set(0,0,0);
+            
+            let rx = Math.floor(this.camera.position.x) + (Math.random() * 10 - 5);
+            let rz = Math.floor(this.camera.position.z) + (Math.random() * 10 - 5);
+            let ry = this.world.getSurfaceHeight(rx, rz) + 2;
+            
+            this.camera.position.set(rx, ry + 15, rz); 
+            this.velocity.set(0,0,0);
             if (window.socket) window.socket.emit('playerRespawn'); 
         }
     }
@@ -117,7 +124,18 @@ export class Player {
         document.addEventListener('keydown', (e) => {
             if (e.code === 'F5') { e.preventDefault(); this.cameraMode = (this.cameraMode + 1) % 3; return; }
             if (e.code === 'KeyQ') { e.preventDefault(); this.dropSelectedItem(); return; } 
-            switch(e.code){ case 'KeyW': this.moveForward = true; break; case 'KeyA': this.moveLeft = true; break; case 'KeyS': this.moveBackward = true; break; case 'KeyD': this.moveRight = true; break; case 'Space': if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } break; case 'KeyE': this.toggleInventory(); break; case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; }
+            switch(e.code){ 
+                case 'KeyW': this.moveForward = true; break; 
+                case 'KeyA': this.moveLeft = true; break; 
+                case 'KeyS': this.moveBackward = true; break; 
+                case 'KeyD': this.moveRight = true; break; 
+                case 'Space': 
+                    if (this.inWater) { this.velocity.y = this.jumpForce * 0.5; }
+                    else if (this.canJump) { this.velocity.y = this.jumpForce; this.canJump = false; } 
+                    break; 
+                case 'KeyE': this.toggleInventory(); break; 
+                case 'Digit1': this.setHotbarSlot(0); break; case 'Digit2': this.setHotbarSlot(1); break; case 'Digit3': this.setHotbarSlot(2); break; case 'Digit4': this.setHotbarSlot(3); break; case 'Digit5': this.setHotbarSlot(4); break; 
+            }
         });
         document.addEventListener('keyup', (e) => { switch(e.code){ case 'KeyW': this.moveForward = false; break; case 'KeyA': this.moveLeft = false; break; case 'KeyS': this.moveBackward = false; break; case 'KeyD': this.moveRight = false; break; } });
         document.addEventListener('mousedown', (e) => { if(this.controls.isLocked) this.onInteract(e.button); });
@@ -135,7 +153,13 @@ export class Player {
         }
 
         const bindTouch = (id, startCb) => { const el = document.getElementById(id); if(el) el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); startCb(); }, {passive: false}); };
-        bindTouch('m-jump', () => { if(this.canJump){ this.velocity.y = this.jumpForce; this.canJump = false; } }); bindTouch('m-inv', () => this.toggleInventory()); bindTouch('m-place', () => { if(this.gameActive) this.onInteract(2); }); bindTouch('m-drop', () => { this.dropSelectedItem(); }); 
+        
+        bindTouch('m-jump', () => { 
+            if (this.inWater) { this.velocity.y = this.jumpForce * 0.5; }
+            else if (this.canJump) { this.velocity.y = this.jumpForce; this.canJump = false; } 
+        }); 
+        
+        bindTouch('m-inv', () => this.toggleInventory()); bindTouch('m-place', () => { if(this.gameActive) this.onInteract(2); }); bindTouch('m-drop', () => { this.dropSelectedItem(); }); 
 
         const lookZone = document.getElementById('m-look-zone'); let lookTouchId = null; let lastTouchX = 0; let lastTouchY = 0; let touchStartTime = 0; let isSwiping = false;
         if (lookZone) {
@@ -325,7 +349,6 @@ export class Player {
             let mesh1st, mesh3rd;
 
             if (isTool(selected.type)) {
-                // ✨ FIX: Attach to the palm (Y=0.4), NOT the elbow (Y=-0.3). Tilt forward to counter the arm angle.
                 mesh1st = create3DWeapon(selected.type); 
                 mesh1st.position.set(0, 0.4, -0.1); 
                 mesh1st.rotation.set(Math.PI / 2, 0, 0); 
@@ -342,7 +365,6 @@ export class Player {
                 mesh3rd.position.set(0, -0.75, -0.15); 
                 mesh3rd.rotation.set(-Math.PI / 8, 0, 0); 
             } else {
-                // ✨ FIX: Attach blocks to the palm (Y=0.4) so they don't clip into your body
                 mesh1st = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), mat); 
                 mesh1st.position.set(0, 0.4, -0.1); 
                 mesh1st.rotation.set(0, Math.PI / 4, 0); 
@@ -459,9 +481,20 @@ export class Player {
     update(delta) {
         if (!this.gameActive) return;
 
+        const headType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
+        const feetType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.5), Math.floor(this.camera.position.z));
+        this.inWater = (headType === 'water' || feetType === 'water');
+        
+        if (headType !== 'air' && headType !== 'water' && headType !== 'torch' && headType !== 'leaves' && this.camera.position.y > 0) {
+            this.camera.position.y += 4.0 * delta; 
+        }
+
+        let currentSpeed = this.inWater ? this.speed * 0.4 : this.speed; 
+        let currentGravity = this.inWater ? this.gravity * 0.25 : this.gravity; 
+
         let targetX, targetZ;
-        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * this.speed; targetZ = -this.joyMove.y * this.speed; } 
-        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * this.speed; targetZ = this._input.z * this.speed; }
+        if (this.isMobile && (this.joyMove.x !== 0 || this.joyMove.y !== 0)) { targetX = this.joyMove.x * currentSpeed; targetZ = -this.joyMove.y * currentSpeed; } 
+        else { this._input.set( Number(this.moveRight) - Number(this.moveLeft), 0, Number(this.moveForward) - Number(this.moveBackward) ).normalize(); targetX = this._input.x * currentSpeed; targetZ = this._input.z * currentSpeed; }
         
         this.velocity.x += (targetX - this.velocity.x) * 10 * delta; this.velocity.z += (targetZ - this.velocity.z) * 10 * delta;
         this._direction.set(1, 0, 0).applyQuaternion(this.camera.quaternion); this._direction.y = 0; this._direction.normalize();
@@ -472,7 +505,11 @@ export class Player {
         this.camera.position.x += (dxRight + dxForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.x -= (dxRight + dxForward); }
         this.camera.position.z += (dzRight + dzForward); if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { this.camera.position.z -= (dzRight + dzForward); }
 
-        this.velocity.y -= this.gravity * delta; const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
+        this.velocity.y -= currentGravity * delta; 
+        
+        if (this.inWater && this.velocity.y < -2.5) this.velocity.y = -2.5; 
+
+        const yMove = this.velocity.y * delta; const ySteps = Math.max(1, Math.ceil(Math.abs(yMove) / 0.1)); const yStepAmt = yMove / ySteps;
         for (let i = 0; i < ySteps; i++) {
             this.camera.position.y += yStepAmt;
             if (this.velocity.y < 0) { if (this.checkCollision(this.camera.position.x, this.camera.position.y, this.camera.position.z)) { let highestBlockY = Math.floor(this.camera.position.y - 1.5 + 0.5); this.camera.position.y = highestBlockY + 0.5 + 1.5; this.velocity.y = 0; this.canJump = true; break; } else { this.canJump = false; } } 
@@ -480,7 +517,7 @@ export class Player {
         }
 
         const horizSpeed = Math.sqrt(this.velocity.x**2 + this.velocity.z**2);
-        if (this.canJump && horizSpeed > 1) { this.footstepTimer += delta; if (this.footstepTimer > 0.35) { let floorType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z)); if(floorType === 'stone' || floorType === 'bedrock') { if(AudioSys && AudioSys.stepStone) AudioSys.stepStone(); } else { if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass(); } this.footstepTimer = 0; } }
+        if (this.canJump && horizSpeed > 1 && !this.inWater) { this.footstepTimer += delta; if (this.footstepTimer > 0.35) { let floorType = this.world.getBlockType(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y - 1.6), Math.floor(this.camera.position.z)); if(floorType === 'stone' || floorType === 'bedrock') { if(AudioSys && AudioSys.stepStone) AudioSys.stepStone(); } else { if(AudioSys && AudioSys.stepGrass) AudioSys.stepGrass(); } this.footstepTimer = 0; } }
 
         for (let i = this.world.drops.length - 1; i >= 0; i--) {
             let drop = this.world.drops[i];
